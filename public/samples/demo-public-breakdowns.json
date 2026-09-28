@@ -1,0 +1,4 @@
+[
+  { "Project": "Glass Houses", "Casting Director": "Lena Park", "Role": "Maya", "Age Range": "25-33", "Gender": "Female", "Date Posted": "2026-09-14", "Deadline": "2026-10-11", "Region": "New York", "Union": "SAG-AFTRA", "Platform": "Netflix", "Production Type": "Limited Series", "Source": "DEMO DATA (sample JSON)", "URL": "https://example.com/demo/glass-houses" },
+  { "Project": "Windy City Nights", "Casting Director": "Dana Whitfield", "Role": "Bartender", "Role Type": "Co-Star", "Age Range": "21-30", "Gender": "Any", "Date Posted": "2026-09-27", "Deadline": "2026-10-04", "Region": "Chicago", "Union": "SAG-AFTRA", "Platform": "NBC", "Production Type": "TV Series", "Source": "DEMO DATA (sample JSON)", "URL": "https://example.com/demo/windy-city" }
+]

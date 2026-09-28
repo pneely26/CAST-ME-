@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #17181c;
+  --color-ink-soft: #3d3f47;
+  --color-muted: #6b6d76;
+  --color-line: #e4e2dd;
+  --color-paper: #f7f6f3;
+  --color-card: #ffffff;
+  --color-accent: #1f3a5f;
+  --color-accent-soft: #e8eef6;
+  --color-signal: #b45309;
+  --color-signal-soft: #fdf3e4;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html, body { background: var(--color-paper); color: var(--color-ink); }
+body { -webkit-font-smoothing: antialiased; }
+
+@layer components {
+.input {
+  @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15;
+}
+.label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted; }
+.btn-primary { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-accent text-white hover:bg-accent/90; }
+.btn-secondary { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-line bg-white text-ink hover:bg-paper; }
+.btn-ghost { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-ink-soft hover:bg-black/5; }
+.btn-danger { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-red-200 bg-white text-red-700 hover:bg-red-50; }
+.card { @apply rounded-lg border border-line bg-card; }
+.table-base { @apply w-full text-left text-sm; }
+.table-base th { @apply whitespace-nowrap border-b border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted; }
+.table-base td { @apply border-b border-line/70 px-3 py-2.5 align-top; }
+.link { @apply text-accent underline-offset-2 hover:underline; }
+}

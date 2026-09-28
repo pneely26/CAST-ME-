@@ -1,0 +1,317 @@
+// Stewart Blind Spot — database schema
+// All externally obtained records carry source name/url, discovered and verified dates.
+// isDemo marks fictional sample data (rendered with a "DEMO DATA" badge).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Region {
+  CHICAGO
+  NEW_YORK
+  LOS_ANGELES
+  ATLANTA
+  SOUTHEAST
+  NATIONWIDE
+  OTHER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  CASTING_CLOSED
+  IN_PRODUCTION
+  WRAPPED
+  UNKNOWN
+}
+
+enum Visibility {
+  PUBLIC
+  UNKNOWN
+  CLOSED
+}
+
+enum BlindSpotClassification {
+  PUBLIC_MATCH
+  AGENCY_REPORTED_NOT_FOUND
+  POSSIBLE_DUPLICATE
+  NEEDS_REVIEW
+}
+
+enum ReviewStatus {
+  UNREVIEWED
+  CONFIRMED_PUBLIC
+  CONFIRMED_NOT_FOUND
+  DISMISSED
+}
+
+enum Relevance {
+  HIGH
+  POSSIBLE
+  LOW
+}
+
+enum WatchType {
+  CASTING_DIRECTOR
+  CASTING_OFFICE
+  PLATFORM
+  PROJECT
+  REGION
+}
+
+enum AlertType {
+  NEW_MATCH
+  WATCHLIST_ACTIVITY
+  POTENTIAL_BLIND_SPOT
+  DEADLINE_APPROACHING
+  REPEAT_CASTING_DIRECTOR
+}
+
+enum AuditAction {
+  IMPORT
+  CREATE
+  EDIT
+  DELETE
+  BLIND_SPOT_CREATED
+  BLIND_SPOT_RESOLVED
+  WATCHLIST_ADDED
+  WATCHLIST_REMOVED
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  title           String
+  normalizedTitle String
+  platform        String?
+  productionType  String?
+  unionStatus     String?
+  region          Region?
+  filmingLocation String?
+  genre           String?
+  status          ProjectStatus @default(UNKNOWN)
+  sourceUrl       String?
+  sourceName      String?
+  discoveredAt    DateTime      @default(now())
+  verifiedAt      DateTime?
+  notes           String?
+  // true when the project only exists because an agency reported it
+  agencyReported  Boolean       @default(false)
+  isDemo          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  castings            ProjectCasting[]
+  breakdowns          PublicBreakdown[]
+  submissions         AgencySubmission[]
+  blindSpots          BlindSpot[]       @relation("BlindSpotProject")
+  candidateBlindSpots BlindSpot[]       @relation("BlindSpotCandidate")
+  watchItems          WatchlistItem[]
+
+  @@index([normalizedTitle])
+  @@index([platform])
+  @@index([region])
+}
+
+model CastingDirector {
+  id             String    @id @default(cuid())
+  name           String
+  normalizedName String    @unique
+  castingOffice  String?
+  // Where the casting director / office is based. Independent of project region.
+  city           String?
+  state          String?
+  website        String?
+  sourceUrl      String?
+  sourceName     String?
+  discoveredAt   DateTime  @default(now())
+  verifiedAt     DateTime?
+  notes          String?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  castings   ProjectCasting[]
+  watchItems WatchlistItem[]
+}
+
+model ProjectCasting {
+  id                String          @id @default(cuid())
+  projectId         String
+  castingDirectorId String
+  role              String? // e.g. Casting Director, Associate, Local Casting
+  castingOffice     String?
+  notes             String?
+  createdAt         DateTime        @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  castingDirector CastingDirector @relation(fields: [castingDirectorId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, castingDirectorId])
+}
+
+model PublicBreakdown {
+  id                   String     @id @default(cuid())
+  projectId            String
+  source               String
+  region               Region?
+  postedDate           DateTime?
+  submissionDeadline   DateTime?
+  visibility           Visibility @default(UNKNOWN)
+  sourceUrl            String?
+  importedAt           DateTime   @default(now())
+  verifiedAt           DateTime?
+  // Role details exactly as stated in the breakdown. Nothing here is inferred.
+  roleName             String?
+  roleType             String?
+  characterDescription String?
+  ageRange             String?
+  gender               String?
+  ethnicity            String?
+  unionStatus          String?
+  castingDirectorRaw   String?
+  castingOfficeRaw     String?
+  // Cached explainable relevance against the actor profile
+  relevance            Relevance?
+  relevanceDetails     Json?
+  isDemo               Boolean    @default(false)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([submissionDeadline])
+  @@index([postedDate])
+}
+
+model AgencySubmission {
+  id                 String    @id @default(cuid())
+  projectId          String?
+  projectTitleRaw    String
+  normalizedTitle    String
+  role               String?
+  castingDirectorRaw String?
+  dateSubmitted      DateTime?
+  platform           String?
+  region             Region?
+  unionStatus        String?
+  status             String?
+  source             String    @default("Agency report")
+  notes              String?
+  importedAt         DateTime  @default(now())
+  isDemo             Boolean   @default(false)
+
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  blindSpot BlindSpot?
+
+  @@index([normalizedTitle])
+}
+
+model BlindSpot {
+  id                 String                  @id @default(cuid())
+  projectId          String
+  agencySubmissionId String?                 @unique
+  candidateProjectId String?
+  detectionDate      DateTime                @default(now())
+  classification     BlindSpotClassification
+  // 0..1 confidence of the title/record match (NOT a talent score)
+  confidence         Float
+  matchDetails       Json?
+  reviewStatus       ReviewStatus            @default(UNREVIEWED)
+  reviewedAt         DateTime?
+  notes              String?
+
+  project          Project           @relation("BlindSpotProject", fields: [projectId], references: [id], onDelete: Cascade)
+  candidateProject Project?          @relation("BlindSpotCandidate", fields: [candidateProjectId], references: [id], onDelete: SetNull)
+  agencySubmission AgencySubmission? @relation(fields: [agencySubmissionId], references: [id], onDelete: Cascade)
+}
+
+model WatchlistItem {
+  id                String    @id @default(cuid())
+  type              WatchType
+  value             String // display value / match key (office name, platform, region code)
+  castingDirectorId String?
+  projectId         String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  castingDirector CastingDirector? @relation(fields: [castingDirectorId], references: [id], onDelete: Cascade)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([type, value])
+}
+
+model ActorProfile {
+  id              String   @id @default("default")
+  name            String
+  profession      String
+  union           String
+  location        String
+  castingRange    String // display text e.g. "20s–30s"
+  playingAgeMin   Int
+  playingAgeMax   Int
+  gender          String
+  castingProfile  String
+  primaryWork     String[]
+  training        String[]
+  additional      String[]
+  targetMarkets   String[]
+  targetPlatforms String[]
+  roleTypes       String[]
+  updatedAt       DateTime @updatedAt
+}
+
+model Platform {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isCustom  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Alert {
+  id         String    @id @default(cuid())
+  type       AlertType
+  title      String
+  body       String
+  link       String?
+  dedupeKey  String    @unique
+  readAt     DateTime?
+  // channels the alert was delivered to (in_app, email, ...)
+  deliveredTo String[]
+  createdAt  DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  action     AuditAction
+  entityType String
+  entityId   String?
+  summary    String
+  details    Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([createdAt])
+}
+
+model ImportBatch {
+  id          String   @id @default(cuid())
+  kind        String // PUBLIC_BREAKDOWN | AGENCY_SUBMISSION
+  fileName    String
+  adapterId   String
+  rowsFound   Int
+  rowsValid   Int
+  rowsInvalid Int
+  duplicates  Int
+  imported    Int
+  createdAt   DateTime @default(now())
+}
+
+model SourceRun {
+  id         String    @id @default(cuid())
+  adapterId  String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  message    String?
+}
