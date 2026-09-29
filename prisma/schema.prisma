@@ -315,3 +315,64 @@ model SourceRun {
   ok         Boolean   @default(false)
   message    String?
 }
+
+// ---------- Web monitor (public pages & feeds the user chooses) ----------
+
+enum WebSourceKind {
+  RSS
+  HTML
+}
+
+enum FindingStatus {
+  NEW
+  ACCEPTED
+  DISMISSED
+}
+
+model WebSource {
+  id                 String        @id @default(cuid())
+  name               String
+  url                String        @unique
+  kind               WebSourceKind
+  // Region these listings belong to (the region you're monitoring with this source)
+  region             Region?
+  platform           String?
+  keywords           String[]
+  excludeKeywords    String[]
+  // Optional CSS selector for one listing on an HTML page (e.g. "article", ".post")
+  itemSelector       String?
+  enabled            Boolean       @default(false)
+  // User confirms the site is public and its terms allow automated checking
+  termsConfirmed     Boolean       @default(false)
+  termsNote          String?
+  minIntervalMinutes Int           @default(360)
+  lastCheckedAt      DateTime?
+  lastStatus         String?
+  lastMessage        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  findings WebFinding[]
+}
+
+model WebFinding {
+  id               String        @id @default(cuid())
+  sourceId         String
+  key              String // stable per-source identity (link, or link#title)
+  url              String
+  title            String
+  snippet          String?
+  publishedAt      DateTime?
+  region           Region?
+  detectedDeadline DateTime?
+  detectedPlatform String?
+  matchedKeywords  String[]
+  status           FindingStatus @default(NEW)
+  breakdownId      String?
+  discoveredAt     DateTime      @default(now())
+
+  source WebSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, key])
+  @@index([status])
+}

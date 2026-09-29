@@ -8,6 +8,7 @@ import clsx from "clsx";
 const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/opportunities", label: "Opportunities" },
+  { href: "/web-monitor", label: "Web Monitor" },
   { href: "/blind-spots", label: "Blind Spots" },
   { href: "/casting-directors", label: "Casting Directors" },
   { href: "/projects", label: "Projects" },
@@ -18,7 +19,7 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function Nav({ unreadAlerts, openBlindSpots }: { unreadAlerts: number; openBlindSpots: number }) {
+export function Nav({ unreadAlerts, openBlindSpots, newFindings = 0 }: { unreadAlerts: number; openBlindSpots: number; newFindings?: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
@@ -36,6 +37,9 @@ export function Nav({ unreadAlerts, openBlindSpots }: { unreadAlerts: number; op
           )}
         >
           {n.label}
+          {n.href === "/web-monitor" && newFindings > 0 && (
+            <span className="rounded bg-sky-400/90 px-1.5 text-[11px] font-semibold text-stone-900">{newFindings}</span>
+          )}
           {n.href === "/blind-spots" && openBlindSpots > 0 && (
             <span className="rounded bg-amber-500/90 px-1.5 text-[11px] font-semibold text-stone-900">{openBlindSpots}</span>
           )}

@@ -24,7 +24,7 @@ describe.skipIf(!url)("blind spot detection with database", () => {
     execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url }, stdio: "ignore" });
     const db = await import("@/lib/server/db");
     const p = db.prisma;
-    for (const m of [p.alert, p.auditLog, p.watchlistItem, p.blindSpot, p.agencySubmission, p.publicBreakdown, p.projectCasting, p.project, p.castingDirector, p.importBatch, p.sourceRun]) {
+    for (const m of [p.webFinding, p.webSource, p.alert, p.auditLog, p.watchlistItem, p.blindSpot, p.agencySubmission, p.publicBreakdown, p.projectCasting, p.project, p.castingDirector, p.importBatch, p.sourceRun]) {
       await (m as unknown as { deleteMany: () => Promise<unknown> }).deleteMany();
     }
     const records = await import("@/lib/server/records");
@@ -80,5 +80,65 @@ describe.skipIf(!url)("blind spot detection with database", () => {
     await mod.rerunUnreviewed();
     const after = await mod.prisma.blindSpot.findUniqueOrThrow({ where: { id: bs.id } });
     expect(after.reviewStatus).toBe("CONFIRMED_NOT_FOUND");
+  });
+
+  it("web monitor: saves findings, de-duplicates, respects intervals, pauses on login walls, and adds opportunities on request", async () => {
+    const wm = await import("@/lib/server/webmonitor");
+    const { clearRobotsCache } = await import("@/lib/web/fetcher");
+    clearRobotsCache();
+    const feed = `<rss><channel>
+      <item><title>Now casting: Lakefront drama (Chicago)</title><link>https://news.example.org/1</link><description>Casting SAG-AFTRA actors in Chicago. Deadline: 12/01/2026</description></item>
+      <item><title>Casting call: LA commercial</title><link>https://news.example.org/2</link><description>Los Angeles, CA</description></item>
+    </channel></rss>`;
+    let body = feed;
+    const deps = {
+      lookup: async () => [{ address: "93.184.216.34" }],
+      fetch: async (url: string) =>
+        url.endsWith("/robots.txt") ? new Response("", { status: 404 }) : new Response(body, { status: 200, headers: { "content-type": "application/rss+xml" } }),
+    };
+    const src = await mod.prisma.webSource.create({
+      data: { name: "Test feed", url: "https://news.example.org/feed", kind: "RSS", region: "CHICAGO", keywords: ["casting"], excludeKeywords: [], enabled: true, termsConfirmed: true },
+    });
+    const t0 = new Date("2026-09-29T12:00:00Z");
+    const r1 = await wm.checkSource(src.id, { now: t0, deps });
+    expect(r1.newFindings).toBe(1); // LA item filtered out for a Chicago source
+    const finding = await mod.prisma.webFinding.findFirstOrThrow({ where: { sourceId: src.id } });
+    expect(finding.region).toBe("CHICAGO");
+    expect(finding.detectedDeadline?.toISOString().slice(0, 10)).toBe("2026-12-01");
+    expect(await mod.prisma.alert.count({ where: { dedupeKey: `WEB:${finding.id}` } })).toBe(1);
+
+    // too soon: skipped without a request
+    const r2 = await wm.checkSource(src.id, { now: new Date(t0.getTime() + 30 * 60_000), deps });
+    expect(r2.skipped).toMatch(/waiting/);
+    // later: same item not duplicated
+    const r3 = await wm.checkSource(src.id, { now: new Date(t0.getTime() + 7 * 3_600_000), deps });
+    expect(r3.newFindings).toBe(0);
+
+    // accept -> UNVERIFIED public breakdown with source link
+    const bId = await wm.acceptFinding(finding.id, { roleName: "Lead" });
+    const b = await mod.prisma.publicBreakdown.findUniqueOrThrow({ where: { id: bId }, include: { project: true } });
+    expect(b.verifiedAt).toBeNull();
+    expect(b.sourceUrl).toBe("https://news.example.org/1");
+    expect(b.source).toBe("Web monitor: Test feed");
+    expect(b.roleName).toBe("Lead");
+
+    // site starts requiring login -> source paused, not retried
+    body = `<h1>Sign in</h1><input type="password">`;
+    const r4 = await wm.checkSource(src.id, { now: new Date(t0.getTime() + 14 * 3_600_000), deps });
+    expect(r4.ok).toBe(false);
+    expect((await mod.prisma.webSource.findUniqueOrThrow({ where: { id: src.id } })).enabled).toBe(false);
+    const r5 = await wm.checkSource(src.id, { now: new Date(t0.getTime() + 30 * 3_600_000), deps });
+    expect(r5.skipped).toBe("Disabled");
+  });
+
+  it("web monitor: sources without terms confirmation or on blocked domains never run", async () => {
+    const wm = await import("@/lib/server/webmonitor");
+    let calls = 0;
+    const deps = { lookup: async () => [{ address: "93.184.216.34" }], fetch: async () => { calls++; return new Response("", { status: 200 }); } };
+    const a = await mod.prisma.webSource.create({ data: { name: "No terms", url: "https://x.example.org/a", kind: "HTML", keywords: [], excludeKeywords: [], enabled: true, termsConfirmed: false } });
+    const b = await mod.prisma.webSource.create({ data: { name: "AA", url: "https://actorsaccess.com/x", kind: "HTML", keywords: [], excludeKeywords: [], enabled: true, termsConfirmed: true } });
+    expect((await wm.checkSource(a.id, { deps })).skipped).toBe("Terms not confirmed");
+    expect((await wm.checkSource(b.id, { deps })).skipped).toMatch(/never collects/);
+    expect(calls).toBe(0);
   });
 });

@@ -3,10 +3,11 @@ import { scheduledAdapters } from "../adapters/registry";
 import { generateAlerts } from "../alerts/engine";
 import { rerunUnreviewed } from "./detection";
 import { updateBreakdownRelevance } from "./profile";
+import { runWebSources } from "./webmonitor";
 
 /**
  * Scheduled monitoring pipeline. Safe to run from cron (npm run monitor) or /api/cron/monitor.
- * 1. Run enabled, compliant, automated source adapters (none by default).
+ * 1. Run enabled, compliant, automated source adapters (none by default) and the web monitor.
  * 2. Refresh relevance, re-run blind-spot detection, emit alerts.
  */
 export async function runMonitor(now = new Date()) {
@@ -31,6 +32,9 @@ export async function runMonitor(now = new Date()) {
       log.push(`${adapter.id}: failed`);
     }
   }
+  const web = await runWebSources(now);
+  const checked = web.filter((r) => !r.skipped);
+  log.push(`web monitor: checked ${checked.length} source(s), ${web.reduce((n, r) => n + r.newFindings, 0)} new finding(s)` + (checked.some((r) => !r.ok) ? ` (${checked.filter((r) => !r.ok).map((r) => r.message).join("; ")})` : ""));
   // Past-deadline breakdowns are displayed as CASTING CLOSED via sourceState(); stored data is not rewritten.
   await updateBreakdownRelevance();
   const rerun = await rerunUnreviewed();

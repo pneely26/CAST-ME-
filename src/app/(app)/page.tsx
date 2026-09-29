@@ -13,7 +13,7 @@ export const metadata = { title: "Dashboard" };
 export default async function Dashboard() {
   const now = new Date();
   const openWhere = { visibility: { not: "CLOSED" as const }, OR: [{ submissionDeadline: null }, { submissionDeadline: { gte: now } }] };
-  const [recent, deadlines, spots, openCount, highCount, spotCount, unread, activity, cdActivity] = await Promise.all([
+  const [recent, deadlines, spots, openCount, highCount, spotCount, unread, activity, cdActivity, webNew] = await Promise.all([
     prisma.publicBreakdown.findMany({ where: openWhere, include: breakdownInclude, orderBy: [{ importedAt: "desc" }], take: 6 }),
     prisma.publicBreakdown.findMany({
       where: { visibility: { not: "CLOSED" }, submissionDeadline: { gte: new Date(now.getTime() - 86_400_000) } },
@@ -33,6 +33,7 @@ export default async function Dashboard() {
     prisma.alert.count({ where: { readAt: null } }),
     getWatchlistActivity(30, now),
     castingDirectorActivity(90, 8),
+    prisma.webFinding.count({ where: { status: "NEW" } }),
   ]);
   const weekDeadlines = deadlines.filter((d) => d.submissionDeadline && d.submissionDeadline.getTime() - now.getTime() < 7 * 86_400_000).length;
 
@@ -49,11 +50,12 @@ export default async function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Open opportunities" value={openCount} href="/opportunities" />
         <Stat label="High relevance" value={highCount} href="/opportunities?relevance=HIGH" tone="accent" />
         <Stat label="Blind spots to review" value={spotCount} href="/blind-spots" tone="signal" />
         <Stat label="Deadlines this week" value={weekDeadlines} href="/opportunities?sort=deadline" />
+        <Stat label="New web findings" value={webNew} href="/web-monitor" tone="accent" />
         <Stat label="Unread alerts" value={unread} href="/alerts" />
       </div>
 

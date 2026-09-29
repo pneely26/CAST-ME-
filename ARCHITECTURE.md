@@ -111,6 +111,26 @@ interface SourceAdapter<TRaw, TNormalized, TSaveOptions> {
 - **`PERMITTED_API_TEMPLATE`** (disabled). A skeleton with a compliance checklist.
 - `registry.scheduledAdapters()` only returns adapters that are enabled, scheduled, automated **and** declare a `termsUrl`. `server/monitor.ts` runs them with a minimum-interval guard and records each run in `SourceRun`.
 
+## Web monitor
+
+`lib/web/` holds the pure logic and `lib/server/webmonitor.ts` handles persistence. Data models: `WebSource` and `WebFinding`.
+
+- **`policy.ts`** holds the non-negotiable rules: a blocklist of account-based casting platforms (subdomains included), a private-address (SSRF) guard, login-wall and CAPTCHA detection, and minimum intervals.
+- **`fetcher.ts`** has `politeFetch()`. It re-runs the host and blocklist checks, DNS public-address check and robots.txt check on **every redirect hop**. It follows redirects manually (up to 3), omits credentials, sends an honest User-Agent, and enforces a timeout and a body size cap. Results are typed:
+  - hard stops: `BLOCKED_DOMAIN`, `ROBOTS_DISALLOWED`, `LOGIN_REQUIRED`, `CHALLENGE`
+  - other failures: `ROBOTS_UNAVAILABLE`, `NETWORK`, and so on.
+
+  robots.txt results are cached per origin for an hour. A robots.txt that returns 404 means "allowed". Any other failure to read it means "skip the page".
+- **`extract.ts`** does the parsing:
+  - RSS/Atom via fast-xml-parser.
+  - HTML via cheerio: a CSS selector per listing, or all links when there's no selector. Nav, header, footer and scripts are stripped.
+  - Keyword and exclude filtering, region detection by explicit place names, deadline detection only when the date is labelled, and platform detection.
+  - A listing that names a different region than the source's region is dropped.
+- **`webmonitor.ts`**:
+  - `checkSource()` enforces terms confirmation, the blocklist and the interval, then saves new findings (unique per source + key), emits a `NEW_MATCH` alert for each, and audit-logs the run. A hard stop sets `enabled=false`.
+  - `runWebSources()` is called from `runMonitor()`.
+  - `acceptFinding()` turns a finding into a `PublicBreakdown` with `verifiedAt=null` and the original URL as its source. It then recomputes relevance and re-runs blind-spot detection.
+
 ## Import system
 
 `client upload → parseUploadAction (server) → mapping UI → previewImportAction → per-row decisions → commitImportAction`

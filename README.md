@@ -92,6 +92,25 @@ Sample files are in `public/samples/` and linked from the Imports page. All of t
 
 You can also add everything by hand: **New breakdown** (Opportunities), **New agency submission**, **New project**, **New casting director**, and **Add watchlist item**.
 
+## Web Monitor (automatic checking of public pages)
+
+**Web Monitor** in the sidebar automatically checks public casting pages and feeds that you choose, filtered by **region** and **keywords**, and collects new listings in a findings inbox.
+
+1. **Add a source.** Enter a name, the URL, the type (RSS/Atom feed or web page), the region to monitor, keywords (e.g. `casting, audition, seeking`), words to exclude (e.g. `extras, background, unpaid`), and how often to check (minimum 1 hour, default 6). You must confirm the page is public and its terms allow automated checking.
+2. **Check.** Sources are checked by `npm run monitor` (schedule it; see *Scheduled monitoring*) or with **Check now**.
+3. **Review findings.** Each finding shows the region, platform and deadline it detected, which keywords matched, and a link to the original page. **Add as opportunity** creates an UNVERIFIED public breakdown (edit project/role first if you like). **Dismiss** hides it. New findings also create alerts.
+
+**Easiest source for any region: Google Alerts as RSS.** At google.com/alerts, create an alert such as `"now casting" Chicago` or `"casting call" Atlanta`. Under *Show options*, set *Deliver to* to *RSS feed*, then paste the feed link here as an RSS source. Make one alert per region.
+
+**Built-in safety rules (can't be switched off):**
+- It never contacts Actors Access, Breakdown Express, Breakdown Services or other account-based casting platforms (the list is in `src/lib/web/policy.ts`), including via redirects.
+- It obeys robots.txt. If robots.txt disallows the page, or can't be read, the page is skipped.
+- It sends no cookies or credentials and identifies itself honestly (`StewartBlindSpot/1.0`).
+- It stops at login pages, HTTP 401/403 and CAPTCHA/bot checks, and pauses that source automatically. It never tries to get past them.
+- It makes one page request per source per check, with at least 60 minutes between scheduled checks (10 minutes for manual checks). It honors HTTP 429 "slow down".
+- It only fetches public internet addresses (no local network), with a 2 MB page limit and a 15-second timeout.
+- Findings are UNVERIFIED until you check them. Region, deadline and platform are only picked up when the text states them (for example, a deadline must be labelled "Deadline", "Submit by" or similar).
+
 ## Using blind spot detection
 
 Each agency submission is automatically:
@@ -125,7 +144,7 @@ npm run monitor
 # 0 */6 * * * cd /path/to/app && npm run monitor >> monitor.log 2>&1
 ```
 
-A monitor run executes enabled, compliant source adapters (none by default), recomputes relevance, re-runs detection for unreviewed submissions, and emits deduplicated alerts. If `CRON_SECRET` is set, `POST /api/cron/monitor` with `Authorization: Bearer <CRON_SECRET>` does the same thing.
+A monitor run checks your Web Monitor sources that are due, executes enabled, compliant source adapters (none by default), recomputes relevance, re-runs detection for unreviewed submissions, and emits deduplicated alerts. If `CRON_SECRET` is set, `POST /api/cron/monitor` with `Authorization: Bearer <CRON_SECRET>` does the same thing.
 
 ## Future API integration
 
