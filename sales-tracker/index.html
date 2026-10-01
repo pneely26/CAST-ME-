@@ -277,9 +277,12 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     <div class="mbig num" id="mTotal">$0</div>
     <div class="mgrid">
       <label class="field"><span>Appointments this week</span><input id="mAppts" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+      <label class="field"><span id="mConfLabel">Confirms this week ($10 each)</span><input id="mConf" type="number" min="0" inputmode="numeric"></label>
+      <label class="field"><span id="mSalesLabel">Sales this week (5 = $50, 10 = $100)</span><input id="mSales" type="number" min="0" inputmode="numeric"></label>
       <label class="field"><span>Other mentoring bonus ($)</span><input id="mExtra" inputmode="decimal" placeholder="0"></label>
       <label class="field wide"><span>Note</span><input id="mNote" placeholder="What the other bonus is for"></label>
     </div>
+    <p class="note" style="margin:4px 0 0">Leave Confirms or Sales empty to count them from your saved sales (the grey number). 5 mill confirms ($25) come from sales you mark as confirmed.</p>
     <ul class="mlines num" id="mLines"></ul>
   </section>
 
@@ -567,13 +570,18 @@ function salesBetween(a,b){ return [...state.sales.values()].filter(s=>s.saleDat
 function mentorWeek(ws){
   const m=state.settings.mentor, we=addDays(ws,6), list=salesBetween(ws,we);
   const big=list.filter(isBig).length, conf=list.filter(s=>s.confirmed);
-  const confBig=conf.filter(isBig).length, confReg=conf.length-confBig;
+  const confBig=conf.filter(isBig).length, autoConf=conf.length-confBig;
   const e=state.mentoring[ws]||{}, appts=Number(e.appts)||0, extra=Number(e.extra)||0;
+  const has=v=>v!==undefined && v!==null && v!=="";
+  // A number typed for the week replaces the count worked out from saved sales.
+  const manualConf=has(e.confirms), manualSales=has(e.sales);
+  const confReg=manualConf?Number(e.confirms):autoConf, n=manualSales?Number(e.sales):list.length;
   const lines={
-    appts:tierAmt(m.apptTiers,appts), big:big*Number(m.bigSaleAmt), count:tierAmt(m.countTiers,list.length),
+    appts:tierAmt(m.apptTiers,appts), big:big*Number(m.bigSaleAmt), count:tierAmt(m.countTiers,n),
     conf:confReg*Number(m.confirmAmt)+confBig*Number(m.bigConfirmAmt), extra
   };
-  return {ws, we, n:list.length, big, confReg, confBig, appts, extra, note:e.note||"", lines, total:Object.values(lines).reduce((a,b)=>a+b,0)};
+  return {ws, we, n, autoN:list.length, manualSales, big, confReg, autoConf, manualConf, confBig, appts, extra, note:e.note||"",
+    confirms:manualConf?Number(e.confirms):"", sales:manualSales?Number(e.sales):"", lines, total:Object.values(lines).reduce((a,b)=>a+b,0)};
 }
 function dayDiff(a,b){ return Math.round((parseISO(b)-parseISO(a))/864e5); }
 // Mentoring for a week is paid on the first mentoring payday after the week ends.
@@ -741,7 +749,10 @@ function renderMentor(){
   if(state.mode!=="week"){ card.hidden=true; return; }
   card.hidden=false;
   const ws=weekBounds(state.weekAnchor)[0], mw=mentorWeek(ws), m=state.settings.mentor;
-  if(mentorWs!==ws){ mentorWs=ws; $("mAppts").value=mw.appts||""; $("mExtra").value=mw.extra||""; $("mNote").value=mw.note; }
+  if(mentorWs!==ws){ mentorWs=ws; $("mAppts").value=mw.appts||""; $("mConf").value=mw.confirms; $("mSales").value=mw.sales; $("mExtra").value=mw.extra||""; $("mNote").value=mw.note; }
+  $("mConf").placeholder=String(mw.autoConf); $("mSales").placeholder=String(mw.autoN);
+  $("mConfLabel").textContent="Confirms this week ("+money(m.confirmAmt)+" each)";
+  $("mSalesLabel").textContent="Sales this week ("+[...m.countTiers].sort((a,b)=>a.min-b.min).map(t=>t.min+" = "+money(t.amt)).join(", ")+")";
   const pd=mentorPayday(ws);
   $("mPaid").textContent=(pd>=todayISO()?"Paid ":"Was paid ")+parseISO(pd).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
   $("mTotal").textContent=money(mw.total);
@@ -751,17 +762,19 @@ function renderMentor(){
   $("mLines").innerHTML=
     li("Appointments: "+mw.appts, more(m.apptTiers,mw.appts,"appointments"), mw.lines.appts)+
     li("5 mill sales: "+mw.big+" × "+money(m.bigSaleAmt), "", mw.lines.big)+
-    li("Sales this week: "+mw.n, more(m.countTiers,mw.n,"sales"), mw.lines.count)+
-    li("Confirmed: "+(mw.confReg+mw.confBig), confParts.length?`<small>${confParts.join(" + ")}</small>`:"<small>Tap “Mark as confirmed” on a sale below</small>", mw.lines.conf)+
+    li("Sales this week: "+mw.n+(mw.manualSales?" (entered)":""), more(m.countTiers,mw.n,"sales"), mw.lines.count)+
+    li("Confirms: "+(mw.confReg+mw.confBig)+(mw.manualConf?" (entered)":""), confParts.length?`<small>${confParts.join(" + ")}</small>`:"<small>Enter your confirms above, or mark sales as confirmed</small>", mw.lines.conf)+
     (mw.extra?li("Other"+(mw.note?": "+esc(mw.note):""), "", mw.extra):"");
 }
 function saveMentorInputs(){
   if(!mentorWs) return;
-  const e={appts:parseInt($("mAppts").value,10)||0, extra:parseFloat(String($("mExtra").value).replace(/[$,]/g,""))||0, note:$("mNote").value.trim()};
-  if(!e.appts && !e.extra && !e.note) delete state.mentoring[mentorWs]; else state.mentoring[mentorWs]=e;
+  const count=id=>{ const v=String($(id).value).trim(); if(v==="") return ""; const n=parseInt(v,10); return isNaN(n)||n<0?"":n; };
+  const e={appts:parseInt($("mAppts").value,10)||0, confirms:count("mConf"), sales:count("mSales"),
+    extra:parseFloat(String($("mExtra").value).replace(/[$,]/g,""))||0, note:$("mNote").value.trim()};
+  if(!e.appts && e.confirms==="" && e.sales==="" && !e.extra && !e.note) delete state.mentoring[mentorWs]; else state.mentoring[mentorWs]=e;
   saveLocal(); renderMentor(); renderWeeks(); renderPay();
 }
-["mAppts","mExtra","mNote"].forEach(id=>$(id).addEventListener("input",saveMentorInputs));
+["mAppts","mConf","mSales","mExtra","mNote"].forEach(id=>$(id).addEventListener("input",saveMentorInputs));
 
 /* ---------- paychecks ---------- */
 $("editPaydays").addEventListener("click",()=>{ $("settings").open=true; $("paydaysHead").scrollIntoView({behavior:"smooth",block:"start"}); });
@@ -795,7 +808,7 @@ function renderPay(){
       if(m.lines.appts) bits.push(m.appts+" appointments "+money(m.lines.appts));
       if(m.lines.big) bits.push(m.big+" five mill "+money(m.lines.big));
       if(m.lines.count) bits.push(m.n+" sales "+money(m.lines.count));
-      if(m.lines.conf) bits.push((m.confReg+m.confBig)+" confirmed "+money(m.lines.conf));
+      if(m.lines.conf) bits.push((m.confReg+m.confBig)+" confirms "+money(m.lines.conf));
       if(m.extra) bits.push("other "+money(m.extra));
       h+=`<li><span>Mentoring bonus<small>Week of ${nice(m.ws)} – ${nice(m.we)}${bits.length?" · "+esc(bits.join(", ")):""}</small></span><b>${money(m.total)}</b></li>`;
     }
@@ -903,7 +916,7 @@ $("restoreIn").addEventListener("change", async e=>{
   const incoming=Array.isArray(o.sales)?o.sales:Object.values(o.sales||{});
   if(!incoming.length && !o.settings && !o.mentoring){ toast("That file isn't a tracker backup."); return; }
   if(o.mentoring && typeof o.mentoring==="object"){
-    for(const [k,v] of Object.entries(o.mentoring)){ const cur=state.mentoring[k]; if(!cur || (!cur.appts && !cur.extra && !cur.note)) state.mentoring[k]=v; }
+    for(const [k,v] of Object.entries(o.mentoring)){ const cur=state.mentoring[k]; if(!cur || (!cur.appts && !cur.extra && !cur.note && (cur.confirms===undefined||cur.confirms==="") && (cur.sales===undefined||cur.sales===""))) state.mentoring[k]=v; }
   }
   let added=0, updated=0;
   for(const s of incoming){
