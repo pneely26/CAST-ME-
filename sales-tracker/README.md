@@ -9,8 +9,12 @@ Everything is static: no build step and no server.
 
 ## Hosting
 
-`.github/workflows/sales-tracker-pages.yml` publishes this folder to GitHub Pages on every push
-that touches it. Turn it on once under **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Hosted on Netlify (free plan, works with private repos). `netlify.toml` at the repo root tells
+Netlify to publish just this folder with no build step, so every push to the default branch
+redeploys it.
+
+One-time setup: app.netlify.com → **Add new project → Import an existing project → GitHub**,
+pick this repo and press **Deploy** (the settings come from `netlify.toml`).
 
 To try it locally: `npx serve sales-tracker` (the service worker needs http://localhost, not file://).
 
