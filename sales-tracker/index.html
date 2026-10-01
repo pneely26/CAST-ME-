@@ -16,6 +16,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script>
+try{ var L=JSON.parse(localStorage.getItem("salesTracker.look")||"{}"); if(L.mode==="light"||L.mode==="dark") document.documentElement.setAttribute("data-theme",L.mode); }catch(e){}
+</script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/pdf-lib.min.js"></script>
 <script src="vendor/anthropic.min.js"></script>
@@ -40,6 +43,7 @@
   --gold:#F0B429; --gold-ink:#2B1F00; --ok:#5CC495; --warn:#F08A5D; --focus:#7AA7FF; --row:#1B2843;
   color-scheme: dark;
 }
+:root{--brand:var(--ink);--brand-ink:var(--paper)}
 html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--paper)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
@@ -72,7 +76,7 @@ button,input,select{font:inherit;color:inherit}
 .stats b{color:var(--ink);font-weight:700;font-size:1.05rem}
 .rangebar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
 .chip{appearance:none;border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:.85rem;cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .custom{display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:.9rem}
 .custom.on{display:flex}
 .custom input{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 8px}
@@ -82,14 +86,14 @@ button,input,select{font:inherit;color:inherit}
 .weeks h2{margin:0 0 2px;font-size:.9rem;color:var(--muted);font-weight:600}
 .wk{appearance:none;display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
 .wk:hover{border-color:var(--muted)}
-.wk[aria-current="true"]{border-color:var(--ink);box-shadow:inset 4px 0 0 var(--gold)}
+.wk[aria-current="true"]{border-color:var(--brand);box-shadow:inset 4px 0 0 var(--gold)}
 .wk .wl{font-weight:600}
 .wk .wn{color:var(--muted);font-size:.88rem}
 .wk .wc{font-weight:800;font-stretch:75%;font-size:1.15rem}
 
 /* Upload */
 .drop{display:block;border:2px dashed var(--line);border-radius:14px;padding:20px 16px;text-align:center;background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
-.drop:hover,.drop.over{border-color:var(--ink)}
+.drop:hover,.drop.over{border-color:var(--brand)}
 .drop strong{display:block;font-size:1.1rem}
 .drop span{color:var(--muted);font-size:.9rem}
 .drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
@@ -100,7 +104,7 @@ button,input,select{font:inherit;color:inherit}
 
 /* Actions */
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 10px;align-items:center}
-.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer}
+.btn{appearance:none;border:1px solid var(--brand);background:var(--brand);color:var(--brand-ink);border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
 .btn.danger{background:transparent;color:var(--warn);border-color:var(--warn)}
 .btn:disabled{opacity:.5;cursor:default}
@@ -153,7 +157,7 @@ tbody tr{cursor:pointer}
 tbody tr:hover{background:var(--row)}
 td.r,th.r{text-align:right}
 td.c,th.c{text-align:center}
-tr.newday td{border-top:2px solid var(--ink)}
+tr.newday td{border-top:2px solid var(--brand)}
 tfoot td{font-weight:700;background:var(--row)}
 @media (min-width:820px){ .tablewrap{display:block} .cards{display:none} }
 
@@ -168,6 +172,13 @@ details.settings h3{margin:22px 0 4px;font-size:.95rem}
 .note{font-size:.82rem;color:var(--muted)}
 .note a{color:inherit}
 .hidden-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Colors */
+.swatches{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+.swatch{appearance:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;position:relative;background:linear-gradient(135deg,var(--a) 0 55%,var(--b) 55% 100%)}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--ink)}
+.swatch.custom{display:flex;align-items:center;justify-content:center;font-size:1.2rem;background:conic-gradient(#e53935,#fdd835,#43a047,#1e88e5,#8e24aa,#e53935);overflow:hidden}
+.swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
 
 /* Dialog */
 dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:0;width:min(560px,94vw);max-height:90vh}
@@ -273,6 +284,15 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
 
   <details class="settings" id="settings">
     <summary>Settings</summary>
+    <h3>Colors</h3>
+    <div class="swatches" id="swatches" role="group" aria-label="App color"></div>
+    <div class="rangebar" role="group" aria-label="Light or dark" style="margin-top:10px">
+      <button class="chip" data-mode="auto">Automatic</button>
+      <button class="chip" data-mode="light">Light</button>
+      <button class="chip" data-mode="dark">Dark</button>
+    </div>
+    <span class="note">Changes right away and is remembered on this device. Automatic follows your phone's light or dark setting.</span>
+    <h3>Your sales</h3>
     <div class="field">
       <label for="setTerms">Your BC as it appears in the logs (separate with commas)</label>
       <input id="setTerms" placeholder="Your name, BC number">
@@ -1104,6 +1124,61 @@ function doPrint(){
   window.print();
 }
 $("printBtn").addEventListener("click", doPrint);
+
+/* ---------- colors ---------- */
+const THEMES = {
+  navy:     {name:"Navy & gold"},
+  ocean:    {name:"Ocean",    brand:"#0B63B6", accent:"#2BB3C0", darkBrand:"#8CC2F5"},
+  forest:   {name:"Forest",   brand:"#1F6B45", accent:"#8BC34A", darkBrand:"#8FD3AE"},
+  berry:    {name:"Berry",    brand:"#6B2FA8", accent:"#E05BA8", darkBrand:"#C6A2F0"},
+  rose:     {name:"Rose",     brand:"#B0305A", accent:"#F4A3B8", darkBrand:"#F29BB6"},
+  sunset:   {name:"Sunset",   brand:"#B4470F", accent:"#F5A623", darkBrand:"#F7B27A"},
+  charcoal: {name:"Charcoal", brand:"#2F3338", accent:"#9AA4AE", darkBrand:"#D5D9DE"}
+};
+const LOOK_KEY="salesTracker.look";
+let look={color:"navy", custom:"#0B63B6", mode:"auto"};
+try{ Object.assign(look, JSON.parse(localStorage.getItem(LOOK_KEY)||"{}")); }catch(e){}
+function hexRgb(h){ h=String(h).replace("#",""); if(h.length===3) h=h.split("").map(c=>c+c).join(""); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgbHex(r,g,b){ return "#"+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join(""); }
+function mix(h,with_,t){ const a=hexRgb(h), b=hexRgb(with_); return rgbHex(a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t); }
+function lum(h){ const c=hexRgb(h).map(v=>{ v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4); }); return .2126*c[0]+.7152*c[1]+.0722*c[2]; }
+const inkOn = h => lum(h)>.32 ? "#10151F" : "#FFFFFF";
+function isDark(){
+  if(look.mode==="dark") return true; if(look.mode==="light") return false;
+  return !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function themeVars(){
+  if(look.color==="custom"){
+    const c=look.custom||"#0B63B6";
+    return {brand:c, darkBrand:lum(c)<.25?mix(c,"#FFFFFF",.5):c, accent:c};
+  }
+  return THEMES[look.color]||THEMES.navy;
+}
+function applyLook(){
+  const root=document.documentElement, t=themeVars(), dark=isDark();
+  if(look.mode==="auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme",look.mode);
+  for(const k of ["--brand","--brand-ink","--gold","--gold-ink","--paper","--row"]) root.style.removeProperty(k);
+  if(t.brand){
+    const b=dark?t.darkBrand:t.brand;
+    root.style.setProperty("--paper", dark?mix("#0E1524",t.brand,.14):mix("#EEF1F4",t.brand,.10));
+    root.style.setProperty("--row", dark?mix("#1B2843",t.brand,.12):mix("#F6F8FA",t.brand,.06));
+    root.style.setProperty("--brand",b); root.style.setProperty("--brand-ink",inkOn(b));
+    root.style.setProperty("--gold",t.accent); root.style.setProperty("--gold-ink",inkOn(t.accent));
+  }
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute("content", t.brand ? (dark?mix(t.darkBrand,"#0E1524",.75):t.brand) : (dark?"#0E1524":"#15233F"));
+  $("swatches").querySelectorAll("[data-color]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.color===look.color)));
+  document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mode===look.mode)));
+}
+function saveLook(){ try{ localStorage.setItem(LOOK_KEY, JSON.stringify(look)); }catch(e){} applyLook(); }
+$("swatches").innerHTML=Object.entries(THEMES).map(([k,t])=>`<button class="swatch" data-color="${k}" title="${t.name}" aria-label="${t.name}" style="--a:${t.brand||"#15233F"};--b:${t.accent||"#F0B429"}"></button>`).join("")
+  +`<label class="swatch custom" data-color="custom" title="Pick any color" aria-label="Pick any color"><input type="color" id="customColor" aria-label="Pick any color"></label>`;
+$("customColor").value=look.custom||"#0B63B6";
+$("swatches").addEventListener("click",e=>{ const b=e.target.closest("button[data-color]"); if(!b) return; look.color=b.dataset.color; saveLook(); });
+$("customColor").addEventListener("input",e=>{ look.color="custom"; look.custom=e.target.value; saveLook(); });
+document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{ look.mode=b.dataset.mode; saveLook(); }));
+if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ if(look.mode==="auto") applyLook(); });
+applyLook();
 
 /* ---------- install / offline ---------- */
 let installEvt=null;
