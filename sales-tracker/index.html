@@ -377,14 +377,16 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
 
     <h3 id="taxesHead">Taxes (estimate)</h3>
     <div class="tiers">
-      <div class="field"><label for="taxFed">Federal income tax (%)</label><input id="taxFed" inputmode="decimal"></div>
+      <div class="field"><label for="taxFedComm">Federal on commission checks (%)</label><input id="taxFedComm" inputmode="decimal"></div>
+      <div class="field"><label for="taxFedMent">Federal on mentoring checks (%)</label><input id="taxFedMent" inputmode="decimal"></div>
+      <div class="field"><label for="taxPreComm">Taken out before taxes, commission checks ($)</label><input id="taxPreComm" inputmode="decimal"></div>
+      <div class="field"><label for="taxPreMent">Taken out before taxes, mentoring checks ($)</label><input id="taxPreMent" inputmode="decimal"></div>
       <div class="field"><label for="taxState">State income tax (%)</label><input id="taxState" inputmode="decimal"></div>
+      <div class="field"><label for="taxLocal">City / local tax (%)</label><input id="taxLocal" inputmode="decimal"></div>
       <div class="field"><label for="taxSS">Social Security (%)</label><input id="taxSS" inputmode="decimal"></div>
       <div class="field"><label for="taxMed">Medicare (%)</label><input id="taxMed" inputmode="decimal"></div>
-      <div class="field"><label for="taxLocal">City / local tax (%)</label><input id="taxLocal" inputmode="decimal"></div>
-      <div class="field"><label for="taxOther">Other deductions per check ($)</label><input id="taxOther" inputmode="decimal"></div>
     </div>
-    <span class="note">Federal starts at 22%, the flat rate employers often withhold from commissions and bonuses. Social Security (6.2%) and Medicare (1.45%) are standard. State is set to Illinois's flat 4.95%; Chicago has no city income tax. Add anything else taken out of each check (insurance, 401k). The easiest way to get exact numbers: match these to a real pay stub.</span>
+    <span class="note">Set from your Sep 2026 pay stubs. Commission checks: $28.48 for dental, vision and telehealth comes out first, then taxes are figured on the rest, with about 11.5% federal. Mentoring checks: nothing taken out first and no federal. Social Security, Medicare and Illinois (4.95%) are flat; Chicago has no city income tax. Federal can drift a little on bigger or smaller checks. Compare with a new stub now and then.</span>
     <div class="field taxpreview">
       <label for="taxTry">Try it: a check of ($)</label>
       <input id="taxTry" inputmode="decimal" placeholder="1000">
@@ -494,7 +496,8 @@ const DEFAULT_SETTINGS = {
   pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" },
   // Estimated withholding, in percent of each check (other = dollars per check).
   // Chicago, IL, single: federal 22% supplemental rate, Illinois flat 4.95%, no Chicago income tax.
-  tax: { fed: 22, state: 4.95, ss: 6.2, med: 1.45, local: 0, other: 0, v: 2 }
+  // From the Sep 11, 2026 commission stub and the Sep 5 mentoring stub.
+  tax: { fedComm: 11.5, fedMent: 0, preComm: 28.48, preMent: 0, state: 4.95, ss: 6.2, med: 1.45, local: 0, v: 3 }
 };
 function mergeSettings(o){
   const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
@@ -503,8 +506,8 @@ function mergeSettings(o){
   if(!pay.regEnd && pay.regStart) pay.regEnd = pay.regStart==="2026-09-21" ? "2026-10-02" : addDays(pay.regStart,13);
   delete pay.regStart;
   if(!pay.regPayday || !pay.regEnd){ pay.regPayday=d.pay.regPayday; pay.regEnd=d.pay.regEnd; }
-  const tax=Object.assign(d.tax, o.tax||{});
-  if(o.tax && o.tax.v!==2){ if(!Number(tax.state)) tax.state=4.95; tax.v=2; }   // add the Illinois rate once for older saved settings
+  // Settings saved before the pay stubs were matched use the stub-based rates (keeping a custom city rate).
+  const tax = (o.tax && o.tax.v===3) ? Object.assign(d.tax, o.tax) : Object.assign(d.tax, {local:Number(o.tax&&o.tax.local)||0});
   return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay, tax});
 }
 const MODEL = "claude-opus-5-5";
@@ -591,14 +594,27 @@ function regPeriodFor(day){
   const k=dayDiff(p.regPayday,day); if(k%14!==0) return null;
   const end=addDays(p.regEnd,k); return [addDays(end,-13), end];
 }
-function taxesOn(gross, t){
+// Commission and mentoring are paid as separate checks: each has its own federal rate and
+// before-tax deductions; the other taxes are figured on what's left after those deductions.
+function taxPart(gross, kind, t){
+  if(!(gross>0)) return [];
+  const pre=Math.min(gross, Number(kind==="comm"?t.preComm:t.preMent)||0), base=gross-pre;
+  const lines=[];
+  if(pre) lines.push({key:"pre", label:"Insurance (before taxes)", amt:pre});
+  for(const [key,label,r] of [["fed","Federal income tax",kind==="comm"?t.fedComm:t.fedMent],["state","Illinois income tax",t.state],["ss","Social Security",t.ss],["med","Medicare",t.med],["local","City / local tax",t.local]])
+    if(Number(r)>0) lines.push({key, label, amt:Math.round(base*Number(r))/100});
+  return lines;
+}
+function taxesOn(commGross, mentGross, t){
   t=t||state.settings.tax;
-  const pct=[["Federal income tax",t.fed],["State income tax",t.state],["Social Security",t.ss],["Medicare",t.med],["City / local tax",t.local]];
-  const lines=pct.filter(([,r])=>Number(r)>0).map(([label,r])=>({label:label+" ("+Number(r)+"%)", amt:Math.round(gross*Number(r))/100}));
-  if(gross>0 && Number(t.other)>0) lines.push({label:"Other deductions", amt:Number(t.other)});
-  const total=lines.reduce((a,l)=>a+l.amt,0);
+  const merged=new Map();
+  for(const l of [...taxPart(commGross,"comm",t), ...taxPart(mentGross,"ment",t)]){
+    const m=merged.get(l.key); if(m) m.amt=Math.round((m.amt+l.amt)*100)/100; else merged.set(l.key, Object.assign({},l));
+  }
+  const lines=[...merged.values()], total=lines.reduce((a,l)=>a+l.amt,0), gross=(commGross||0)+(mentGross||0);
   return {lines, total, net:Math.max(0,gross-total)};
 }
+const checkTaxes = c => taxesOn(c.reg?c.reg.amt:0, c.mentor?c.mentor.total:0);
 const cents = n => "$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 function paycheckOn(day){
   let mentor=null, reg=null;
@@ -796,7 +812,7 @@ function renderPay(){
     return h;
   };
   const taxBlock=c=>{
-    const tx=taxesOn(c.total);
+    const tx=checkTaxes(c);
     return `<li class="tot"><span>Gross pay</span><b>${cents(c.total)}</b></li>`
       + tx.lines.map(l=>`<li class="tax"><span>${esc(l.label)}</span><b>−${cents(l.amt)}</b></li>`).join("")
       + `<li class="tot"><span>Take-home (estimate)</span><b>${cents(tx.net)}</b></li>`;
@@ -824,13 +840,13 @@ function renderPay(){
   for(const c of checks){ if(c.date<today) continue; upcoming.push(c); if(c.reg || upcoming.length>=3) break; }
   const kindOf=c=>c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring bonus only";
   $("payNext").innerHTML = upcoming.length
-    ? upcoming.map((c,i)=>`<div class="${i?"paynext2":""}"><div class="sub">${i?"Then":"Next payday"} · ${esc(fmt(c.date))} · ${kindOf(c)}${unfinished(c)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(taxesOn(c.total).net)}</div><div class="sub">take-home, from ${money(c.total)} before taxes</div><ul class="mlines num">${detail(c)}</ul></div>`).join("")
+    ? upcoming.map((c,i)=>`<div class="${i?"paynext2":""}"><div class="sub">${i?"Then":"Next payday"} · ${esc(fmt(c.date))} · ${kindOf(c)}${unfinished(c)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(checkTaxes(c).net)}</div><div class="sub">take-home, from ${money(c.total)} before taxes</div><ul class="mlines num">${detail(c)}</ul></div>`).join("")
     : `<p class="note">No paydays found. Check your paydays in Settings.</p>`;
   const others=checks.filter(c=>!upcoming.includes(c) && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
   $("payHistTitle").textContent="Every payday ("+others.length+")";
   $("payList").innerHTML=others.map(c=>{
     const kind=c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring";
-    return `<details class="check"><summary class="num"><span class="when">${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${kind} · ${money(c.total)} before taxes</small></span><b>${cents(taxesOn(c.total).net)}</b></summary><div class="body"><ul class="mlines num">${detail(c)}</ul></div></details>`;
+    return `<details class="check"><summary class="num"><span class="when">${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${kind} · ${money(c.total)} before taxes</small></span><b>${cents(checkTaxes(c).net)}</b></summary><div class="body"><ul class="mlines num">${detail(c)}</ul></div></details>`;
   }).join("") || '<p class="note">None yet.</p>';
   $("payNote").textContent = state.settings.pay.regPayday ? "" : "Add your regular commission payday in Settings → Paydays so it's included in your checks.";
 }
@@ -852,15 +868,17 @@ function fillSettings(){
   $("countTierBox").innerHTML=pairs(m.countTiers,"ct","Sales");
   $("setBigRvol").value=m.bigRvol; $("setBigAmt").value=m.bigSaleAmt; $("setConfAmt").value=m.confirmAmt; $("setBigConfAmt").value=m.bigConfirmAmt;
   $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegEnd").value=py.regEnd||"";
-  const tx=s.tax; $("taxFed").value=tx.fed; $("taxState").value=tx.state; $("taxSS").value=tx.ss; $("taxMed").value=tx.med; $("taxLocal").value=tx.local; $("taxOther").value=tx.other;
+  const tx=s.tax; $("taxFedComm").value=tx.fedComm; $("taxFedMent").value=tx.fedMent; $("taxPreComm").value=tx.preComm; $("taxPreMent").value=tx.preMent;
+  $("taxState").value=tx.state; $("taxSS").value=tx.ss; $("taxMed").value=tx.med; $("taxLocal").value=tx.local;
   regHint(); taxPreview();
 }
-function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fed:numIn("taxFed",0), state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), other:numIn("taxOther",0), v:2}; }
+function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fedComm:numIn("taxFedComm",0), fedMent:numIn("taxFedMent",0), preComm:numIn("taxPreComm",0), preMent:numIn("taxPreMent",0),
+  state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), v:3}; }
 function taxPreview(){
-  const g=parseFloat(String($("taxTry").value).replace(/[$,]/g,""))||1000, tx=taxesOn(g, readTax());
-  $("taxTryOut").textContent="On "+cents(g)+": about "+cents(tx.total)+" in taxes and deductions, "+cents(tx.net)+" take-home.";
+  const g=parseFloat(String($("taxTry").value).replace(/[$,]/g,""))||1000, t=readTax(), c=taxesOn(g,0,t), m=taxesOn(0,g,t);
+  $("taxTryOut").textContent="As a commission check: "+cents(c.net)+" take-home ("+cents(c.total)+" taken out). As a mentoring check: "+cents(m.net)+" take-home ("+cents(m.total)+" taken out).";
 }
-["taxFed","taxState","taxSS","taxMed","taxLocal","taxOther","taxTry"].forEach(id=>$(id).addEventListener("input",taxPreview));
+["taxFedComm","taxFedMent","taxPreComm","taxPreMent","taxState","taxSS","taxMed","taxLocal","taxTry"].forEach(id=>$(id).addEventListener("input",taxPreview));
 function regHint(){
   const e=$("setRegEnd").value;
   $("regHint").textContent=e ? "Each regular check pays the 2 weeks of sales ending that day, like "+nice(addDays(e,-13))+" – "+nice(e)+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
