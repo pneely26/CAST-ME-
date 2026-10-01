@@ -380,7 +380,7 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       <div class="field"><label for="taxLocal">City / local tax (%)</label><input id="taxLocal" inputmode="decimal"></div>
       <div class="field"><label for="taxOther">Other deductions per check ($)</label><input id="taxOther" inputmode="decimal"></div>
     </div>
-    <span class="note">Federal starts at 22%, the flat rate employers often withhold from commissions and bonuses. Social Security (6.2%) and Medicare (1.45%) are standard. Add your state's rate, and anything else taken out of each check (insurance, 401k). The easiest way to get exact numbers: match these to a real pay stub.</span>
+    <span class="note">Federal starts at 22%, the flat rate employers often withhold from commissions and bonuses. Social Security (6.2%) and Medicare (1.45%) are standard. State is set to Illinois's flat 4.95%; Chicago has no city income tax. Add anything else taken out of each check (insurance, 401k). The easiest way to get exact numbers: match these to a real pay stub.</span>
     <div class="field taxpreview">
       <label for="taxTry">Try it: a check of ($)</label>
       <input id="taxTry" inputmode="decimal" placeholder="1000">
@@ -489,7 +489,8 @@ const DEFAULT_SETTINGS = {
   // the Oct 9, 2026 check pays sales through Fri Oct 2 (the 2 weeks ending that day).
   pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" },
   // Estimated withholding, in percent of each check (other = dollars per check).
-  tax: { fed: 22, state: 0, ss: 6.2, med: 1.45, local: 0, other: 0 }
+  // Chicago, IL, single: federal 22% supplemental rate, Illinois flat 4.95%, no Chicago income tax.
+  tax: { fed: 22, state: 4.95, ss: 6.2, med: 1.45, local: 0, other: 0, v: 2 }
 };
 function mergeSettings(o){
   const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
@@ -498,7 +499,9 @@ function mergeSettings(o){
   if(!pay.regEnd && pay.regStart) pay.regEnd = pay.regStart==="2026-09-21" ? "2026-10-02" : addDays(pay.regStart,13);
   delete pay.regStart;
   if(!pay.regPayday || !pay.regEnd){ pay.regPayday=d.pay.regPayday; pay.regEnd=d.pay.regEnd; }
-  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay, tax:Object.assign(d.tax, o.tax||{})});
+  const tax=Object.assign(d.tax, o.tax||{});
+  if(o.tax && o.tax.v!==2){ if(!Number(tax.state)) tax.state=4.95; tax.v=2; }   // add the Illinois rate once for older saved settings
+  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay, tax});
 }
 const MODEL = "claude-opus-5-5";
 
@@ -834,7 +837,7 @@ function fillSettings(){
   const tx=s.tax; $("taxFed").value=tx.fed; $("taxState").value=tx.state; $("taxSS").value=tx.ss; $("taxMed").value=tx.med; $("taxLocal").value=tx.local; $("taxOther").value=tx.other;
   regHint(); taxPreview();
 }
-function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fed:numIn("taxFed",0), state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), other:numIn("taxOther",0)}; }
+function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fed:numIn("taxFed",0), state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), other:numIn("taxOther",0), v:2}; }
 function taxPreview(){
   const g=parseFloat(String($("taxTry").value).replace(/[$,]/g,""))||1000, tx=taxesOn(g, readTax());
   $("taxTryOut").textContent="On "+cents(g)+": about "+cents(tx.total)+" in taxes and deductions, "+cents(tx.net)+" take-home.";
