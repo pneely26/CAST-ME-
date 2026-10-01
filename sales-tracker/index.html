@@ -109,8 +109,34 @@ button,input,select{font:inherit;color:inherit}
 /* Sales list */
 .day{margin-top:16px}
 .day h3{margin:0 0 6px;font-size:.85rem;font-weight:700;color:var(--muted);display:flex;justify-content:space-between}
-.sale{display:grid;grid-template-columns:1fr auto;gap:2px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px;cursor:pointer;text-align:left;width:100%;appearance:none}
+.sale{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:6px;overflow:hidden}
 .sale:hover{border-color:var(--muted)}
+.salemain{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 14px;cursor:pointer;text-align:left;width:100%;appearance:none;background:transparent;border:0}
+.conf{appearance:none;display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;padding:9px 14px;font-size:.88rem;color:var(--muted);cursor:pointer}
+.conf[aria-pressed="true"]{color:var(--ok);font-weight:700}
+.tconf{appearance:none;border:1px solid var(--line);background:transparent;border-radius:6px;width:28px;height:26px;cursor:pointer;color:var(--ok);font-weight:700}
+.bonus{color:var(--ok);font-weight:600}
+
+/* Mentoring + paychecks */
+.panel{margin:0 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.panel[hidden]{display:none}
+.panelhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.panel h2{margin:0;font-size:1rem}
+.panel .sub{color:var(--muted);font-size:.85rem}
+.mbig{font-stretch:62%;font-weight:800;font-size:clamp(2.4rem,10vw,3.4rem);line-height:1;margin:8px 0 4px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.mgrid .wide{grid-column:1/-1}
+.field>span{font-size:.85rem;color:var(--muted)}
+.mgrid input{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 10px;width:100%}
+.mlines{list-style:none;margin:8px 0 0;padding:0;font-size:.92rem}
+.mlines li{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line)}
+.mlines li span small{display:block;color:var(--muted);font-size:.8rem}
+.mlines li b{white-space:nowrap}
+.est{display:inline-block;font-size:.75rem;font-weight:700;color:var(--gold-ink);background:var(--gold);border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+details.paylist{margin-top:12px}
+details.paylist summary{cursor:pointer;font-weight:600;font-size:.92rem;padding:4px 0}
+.payrow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:.9rem}
+.payrow small{display:block;color:var(--muted);font-size:.8rem}
 .sale .co{font-weight:700}
 .sale .comm{font-weight:800;font-stretch:75%;font-size:1.25rem;text-align:right}
 .sale .meta{grid-column:1/-1;color:var(--muted);font-size:.86rem;display:flex;gap:4px 14px;flex-wrap:wrap}
@@ -208,6 +234,24 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     </div>
   </section>
 
+  <section class="panel" id="mentorCard" aria-live="polite">
+    <div class="panelhead"><h2>Mentoring bonus</h2><span class="sub" id="mPaid"></span></div>
+    <div class="mbig num" id="mTotal">$0</div>
+    <div class="mgrid">
+      <label class="field"><span>Appointments this week</span><input id="mAppts" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+      <label class="field"><span>Other mentoring bonus ($)</span><input id="mExtra" inputmode="decimal" placeholder="0"></label>
+      <label class="field wide"><span>Note</span><input id="mNote" placeholder="What the other bonus is for"></label>
+    </div>
+    <ul class="mlines num" id="mLines"></ul>
+  </section>
+
+  <section class="panel" id="payCard">
+    <div class="panelhead"><h2>Paychecks</h2><span class="sub">Before taxes and deductions</span></div>
+    <div id="payNext"></div>
+    <details class="paylist"><summary>Other paydays</summary><div id="payList"></div></details>
+    <p class="note" id="payNote"></p>
+  </section>
+
   <section class="weeks" id="weeks" aria-label="Your weeks"></section>
 
   <label class="drop" id="drop">
@@ -249,6 +293,36 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
         <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
       </select>
     </div>
+    <h3>Mentoring bonus</h3>
+    <div class="field">
+      <label>Appointments in a week (at or above → bonus)</label>
+      <div class="tiers" id="apptTierBox"></div>
+    </div>
+    <div class="field">
+      <label>Sales in a week (at or above → bonus)</label>
+      <div class="tiers" id="countTierBox"></div>
+    </div>
+    <div class="tiers">
+      <div class="field"><label for="setBigRvol">A 5 mill sale is RVOL at or above</label><input id="setBigRvol" inputmode="decimal"></div>
+      <div class="field"><label for="setBigAmt">Bonus per 5 mill sale ($)</label><input id="setBigAmt" inputmode="decimal"></div>
+      <div class="field"><label for="setConfAmt">Each confirmed lead ($)</label><input id="setConfAmt" inputmode="decimal"></div>
+      <div class="field"><label for="setBigConfAmt">Each confirmed 5 mill ($)</label><input id="setBigConfAmt" inputmode="decimal"></div>
+    </div>
+    <span class="note">A confirmed 5 mill sale earns the 5 mill confirm amount instead of the regular confirm amount.</span>
+
+    <h3>Paydays</h3>
+    <div class="field">
+      <label for="setMentorDay">Mentoring bonus is paid every week on (for the week before)</label>
+      <select id="setMentorDay">
+        <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+        <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+      </select>
+    </div>
+    <div class="tiers">
+      <div class="field"><label for="setRegPay">Regular commission: any one payday</label><input type="date" id="setRegPay"></div>
+      <div class="field"><label for="setRegStart">That check paid sales starting</label><input type="date" id="setRegStart"></div>
+    </div>
+    <span class="note" id="regHint">Regular commission is paid every 2 weeks and covers 2 weeks of sales.</span>
     <div class="dlgactions">
       <button class="btn" id="saveSettings">Save settings</button>
     </div>
@@ -293,6 +367,7 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       <div class="field"><label for="fNote">Note</label><input id="fNote"></div>
     </div>
     <label class="check"><input type="checkbox" id="f44"> 44 checked</label>
+    <label class="check"><input type="checkbox" id="fConf"> Confirmed (mentoring bonus)</label>
     <div class="dlgactions">
       <button class="btn" id="dlgSave" value="save">Save</button>
       <button class="btn ghost" id="dlgCancel" value="cancel" formnovalidate>Cancel</button>
@@ -315,12 +390,24 @@ const DEFAULT_SETTINGS = {
   bcTerms: [],
   bcLabel: "",
   tiers: [{min:5, amt:546}, {min:2, amt:318}, {min:1, amt:67}],
-  weekStart: 1
+  weekStart: 1,
+  mentor: {
+    apptTiers: [{min:50, amt:50}, {min:60, amt:75}],
+    countTiers: [{min:5, amt:50}, {min:10, amt:100}],
+    bigRvol: 5, bigSaleAmt: 50,
+    confirmAmt: 10, bigConfirmAmt: 25
+  },
+  pay: { mentorDay: 5, regPayday: "", regStart: "" }
 };
+function mergeSettings(o){
+  const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
+  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay:Object.assign(d.pay, o.pay||{})});
+}
 const MODEL = "claude-opus-5-5";
 
 const state = {
   sales: new Map(),           // id -> sale
+  mentoring: {},              // week start ISO -> {appts, extra, note}
   settings: structuredClone(DEFAULT_SETTINGS),
   mode: "week",               // week | custom | all
   weekAnchor: todayISO(),
@@ -367,6 +454,43 @@ function commission(rvol){
   return null;
 }
 
+/* ---------- mentoring bonus + paydays ---------- */
+function tierAmt(tiers,v){ let best=0; for(const t of tiers||[]) if(!isNaN(t.min) && v>=t.min && t.amt>best) best=t.amt; return best; }
+function nextTier(tiers,v){ return (tiers||[]).filter(t=>!isNaN(t.min) && t.min>v).sort((a,b)=>a.min-b.min)[0]||null; }
+const isBig = s => parseFloat(s.rvol) >= Number(state.settings.mentor.bigRvol);
+function saleBonus(s){
+  const m=state.settings.mentor, big=isBig(s);
+  return (big?Number(m.bigSaleAmt):0) + (s.confirmed?Number(big?m.bigConfirmAmt:m.confirmAmt):0);
+}
+function salesBetween(a,b){ return [...state.sales.values()].filter(s=>s.saleDate>=a && s.saleDate<=b); }
+function mentorWeek(ws){
+  const m=state.settings.mentor, we=addDays(ws,6), list=salesBetween(ws,we);
+  const big=list.filter(isBig).length, conf=list.filter(s=>s.confirmed);
+  const confBig=conf.filter(isBig).length, confReg=conf.length-confBig;
+  const e=state.mentoring[ws]||{}, appts=Number(e.appts)||0, extra=Number(e.extra)||0;
+  const lines={
+    appts:tierAmt(m.apptTiers,appts), big:big*Number(m.bigSaleAmt), count:tierAmt(m.countTiers,list.length),
+    conf:confReg*Number(m.confirmAmt)+confBig*Number(m.bigConfirmAmt), extra
+  };
+  return {ws, we, n:list.length, big, confReg, confBig, appts, extra, note:e.note||"", lines, total:Object.values(lines).reduce((a,b)=>a+b,0)};
+}
+function dayDiff(a,b){ return Math.round((parseISO(b)-parseISO(a))/864e5); }
+// Mentoring for a week is paid on the first mentoring payday after the week ends.
+function mentorPayday(ws){ let d=addDays(ws,7); while(parseISO(d).getDay()!==Number(state.settings.pay.mentorDay)) d=addDays(d,1); return d; }
+function regPeriodFor(day){
+  const p=state.settings.pay; if(!p.regPayday || !p.regStart) return null;
+  const k=dayDiff(p.regPayday,day); if(k%14!==0) return null;
+  const a=addDays(p.regStart,k); return [a, addDays(a,13)];
+}
+function paycheckOn(day){
+  let mentor=null, reg=null;
+  if(parseISO(day).getDay()===Number(state.settings.pay.mentorDay)) mentor=mentorWeek(addDays(weekBounds(day)[0],-7));
+  const per=regPeriodFor(day);
+  if(per){ const list=salesBetween(per[0],per[1]); reg={from:per[0], to:per[1], n:list.length, amt:list.reduce((t,s)=>t+(commission(s.rvol)||0),0)}; }
+  if(!mentor && !reg) return null;
+  return {date:day, mentor, reg, total:(mentor?mentor.total:0)+(reg?reg.amt:0)};
+}
+
 /* ---------- toast ---------- */
 let toastT;
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),3200); }
@@ -379,12 +503,13 @@ function loadLocal(){
   try{
     const raw=localStorage.getItem(LS_KEY); if(!raw) return;
     const o=JSON.parse(raw);
-    if(o.settings) state.settings=Object.assign(structuredClone(DEFAULT_SETTINGS),o.settings);
+    if(o.settings) state.settings=mergeSettings(o.settings);
     state.sales=new Map(Object.entries(o.sales||{}));
+    state.mentoring=o.mentoring||{};
   }catch(e){ storageOk=false; }
 }
 function saveLocal(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({settings:state.settings, sales:Object.fromEntries(state.sales)})); storageOk=true; }
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring})); storageOk=true; }
   catch(e){ storageOk=false; }
   showStoreNote();
 }
@@ -427,12 +552,12 @@ function renderWeeks(){
   if(!keys.length){ $("weeks").innerHTML=""; return; }
   const cur=state.mode==="week"?weekBounds(state.weekAnchor)[0]:null;
   $("weeks").innerHTML="<h2>Your weeks</h2>"+keys.map(k=>{ const w=byWeek.get(k);
-    return `<button class="wk" data-week="${k}" aria-current="${k===cur}"><span><span class="wl">${nice(k)} – ${nice(addDays(k,6))}</span><br><span class="wn">${w.n} sale${w.n===1?"":"s"}</span></span><span class="wc num">${money(w.c)}</span></button>`; }).join("");
+    return `<button class="wk" data-week="${k}" aria-current="${k===cur}"><span><span class="wl">${nice(k)} – ${nice(addDays(k,6))}</span><br><span class="wn">${w.n} sale${w.n===1?"":"s"}${(()=>{ const mt=mentorWeek(k).total; return mt?" · "+money(mt)+" mentoring":""; })()}</span></span><span class="wc num">${money(w.c)}</span></button>`; }).join("");
 }
 $("weeks").addEventListener("click",e=>{ const b=e.target.closest("[data-week]"); if(!b) return; state.weekAnchor=b.dataset.week; setMode("week"); });
 
 function render(){
-  renderWeeks();
+  renderWeeks(); renderMentor(); renderPay();
   const list=salesInRange();
   let tc=0,tr=0,tf=0, flagged=0;
   for(const s of list){ const c=commission(s.rvol); if(c==null) flagged++; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; }
@@ -457,23 +582,77 @@ function render(){
     html+=`<div class="day"><h3><span>${esc(parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}))}</span><span class="num">${money(dc)}</span></h3>`;
     for(const s of items){
       const c=commission(s.rvol);
-      html+=`<button class="sale" data-id="${esc(s.id)}">
+      const bn=saleBonus(s);
+      html+=`<div class="sale"><button class="salemain" data-id="${esc(s.id)}">
         <span class="co">${esc(s.company)}</span>
         <span class="comm num">${c==null?'<span class="flag">$0</span>':money(c)}</span>
-        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
-      </button>`;
+        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${bn?`<span class="bonus">Mentoring +${money(bn)}</span>`:""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
+      </button><button class="conf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}">${s.confirmed?"✓ Confirmed":"Mark as confirmed"}</button></div>`;
     }
     html+="</div>";
   }
   $("cards").innerHTML=html;
   // table
-  let t=`<table><thead><tr><th>Sale date</th><th class="r">RVOL</th><th>Par</th><th>Sales rep</th><th>Run date</th><th>Company</th><th class="r">Fee</th><th>Taken by</th><th class="c">44</th><th>Appt date</th><th class="r">Commission</th></tr></thead><tbody>`;
+  let t=`<table><thead><tr><th>Sale date</th><th class="r">RVOL</th><th>Par</th><th>Sales rep</th><th>Run date</th><th>Company</th><th class="r">Fee</th><th>Taken by</th><th class="c">44</th><th>Appt date</th><th class="c">Conf</th><th class="r">Commission</th></tr></thead><tbody>`;
   for(const s of list){
     const c=commission(s.rvol); const nd=s.saleDate!==day; day=s.saleDate;
-    t+=`<tr data-id="${esc(s.id)}" class="${nd?"newday":""}"><td>${nd?short(s.saleDate):""}</td><td class="r num">${esc(s.rvol)}</td><td>${esc(s.par)}</td><td>${esc(s.rep)}</td><td class="num">${esc(s.runDate)}</td><td>${esc(s.company)}${s.note?' <span class="flag" title="'+esc(s.note)+'">*</span>':""}</td><td class="r num">${Number(s.fee||0).toLocaleString()}</td><td>${esc(s.takenBy)}</td><td class="c">${s.c44?'<span class="tick">✓</span>':""}</td><td class="num">${esc(s.apptDate)}</td><td class="r num"><b>${c==null?'<span class="flag">$0</span>':money(c)}</b></td></tr>`;
+    t+=`<tr data-id="${esc(s.id)}" class="${nd?"newday":""}"><td>${nd?short(s.saleDate):""}</td><td class="r num">${esc(s.rvol)}</td><td>${esc(s.par)}</td><td>${esc(s.rep)}</td><td class="num">${esc(s.runDate)}</td><td>${esc(s.company)}${s.note?' <span class="flag" title="'+esc(s.note)+'">*</span>':""}</td><td class="r num">${Number(s.fee||0).toLocaleString()}</td><td>${esc(s.takenBy)}</td><td class="c">${s.c44?'<span class="tick">✓</span>':""}</td><td class="num">${esc(s.apptDate)}</td><td class="c"><button class="tconf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}" aria-label="${s.confirmed?"Confirmed. Tap to unmark":"Mark as confirmed"}">${s.confirmed?"✓":""}</button></td><td class="r num"><b>${c==null?'<span class="flag">$0</span>':money(c)}</b></td></tr>`;
   }
-  t+=`</tbody><tfoot><tr><td>Total</td><td class="r num">${tr.toFixed(1)}</td><td></td><td>${list.length} sales</td><td></td><td></td><td class="r num">${tf.toLocaleString()}</td><td></td><td class="c">${list.filter(s=>s.c44).length}</td><td></td><td class="r num">${money(tc)}</td></tr></tfoot></table>`;
+  t+=`</tbody><tfoot><tr><td>Total</td><td class="r num">${tr.toFixed(1)}</td><td></td><td>${list.length} sales</td><td></td><td></td><td class="r num">${tf.toLocaleString()}</td><td></td><td class="c">${list.filter(s=>s.c44).length}</td><td></td><td class="c">${list.filter(s=>s.confirmed).length}</td><td class="r num">${money(tc)}</td></tr></tfoot></table>`;
   $("tableWrap").innerHTML=t;
+}
+
+/* ---------- mentoring card ---------- */
+let mentorWs=null;
+function renderMentor(){
+  const card=$("mentorCard");
+  if(state.mode!=="week"){ card.hidden=true; return; }
+  card.hidden=false;
+  const ws=weekBounds(state.weekAnchor)[0], mw=mentorWeek(ws), m=state.settings.mentor;
+  if(mentorWs!==ws){ mentorWs=ws; $("mAppts").value=mw.appts||""; $("mExtra").value=mw.extra||""; $("mNote").value=mw.note; }
+  const pd=mentorPayday(ws);
+  $("mPaid").textContent=(pd>=todayISO()?"Paid ":"Was paid ")+parseISO(pd).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  $("mTotal").textContent=money(mw.total);
+  const more=(tiers,v,what)=>{ const t=nextTier(tiers,v); return t?`<small>${t.min-v} more ${what} for ${money(t.amt)}</small>`:""; };
+  const li=(label,sub,amt)=>`<li><span>${label}${sub||""}</span><b>${money(amt)}</b></li>`;
+  const confParts=[]; if(mw.confReg) confParts.push(mw.confReg+" × "+money(m.confirmAmt)); if(mw.confBig) confParts.push(mw.confBig+" five mill × "+money(m.bigConfirmAmt));
+  $("mLines").innerHTML=
+    li("Appointments: "+mw.appts, more(m.apptTiers,mw.appts,"appointments"), mw.lines.appts)+
+    li("5 mill sales: "+mw.big+" × "+money(m.bigSaleAmt), "", mw.lines.big)+
+    li("Sales this week: "+mw.n, more(m.countTiers,mw.n,"sales"), mw.lines.count)+
+    li("Confirmed: "+(mw.confReg+mw.confBig), confParts.length?`<small>${confParts.join(" + ")}</small>`:"<small>Tap “Mark as confirmed” on a sale below</small>", mw.lines.conf)+
+    (mw.extra?li("Other"+(mw.note?": "+esc(mw.note):""), "", mw.extra):"");
+}
+function saveMentorInputs(){
+  if(!mentorWs) return;
+  const e={appts:parseInt($("mAppts").value,10)||0, extra:parseFloat(String($("mExtra").value).replace(/[$,]/g,""))||0, note:$("mNote").value.trim()};
+  if(!e.appts && !e.extra && !e.note) delete state.mentoring[mentorWs]; else state.mentoring[mentorWs]=e;
+  saveLocal(); renderMentor(); renderWeeks(); renderPay();
+}
+["mAppts","mExtra","mNote"].forEach(id=>$(id).addEventListener("input",saveMentorInputs));
+
+/* ---------- paychecks ---------- */
+function renderPay(){
+  const today=todayISO(), checks=[];
+  for(let i=-42;i<=28;i++){ const c=paycheckOn(addDays(today,i)); if(c) checks.push(c); }
+  const next=checks.find(c=>c.date>=today);
+  const fmt=d=>parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  const unfinished=c=>(c.mentor && c.mentor.we>=today) || (c.reg && c.reg.to>=today);
+  const parts=c=>{
+    let h="";
+    if(c.mentor) h+=`<li><span>Mentoring bonus<small>Week of ${nice(c.mentor.ws)} – ${nice(c.mentor.we)}</small></span><b>${money(c.mentor.total)}</b></li>`;
+    if(c.reg) h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}</small></span><b>${money(c.reg.amt)}</b></li>`;
+    return h;
+  };
+  $("payNext").innerHTML = next
+    ? `<div class="sub">Next payday · ${esc(fmt(next.date))}${unfinished(next)?'<span class="est">So far</span>':""}</div><div class="mbig num">${money(next.total)}</div><ul class="mlines num">${parts(next)}</ul>`
+    : `<p class="note">No paydays found. Check your paydays in Settings.</p>`;
+  const others=checks.filter(c=>c!==next && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
+  $("payList").innerHTML=others.map(c=>{
+    const bits=[]; if(c.mentor) bits.push("Mentoring "+money(c.mentor.total)); if(c.reg) bits.push("Commission "+money(c.reg.amt));
+    return `<div class="payrow num"><span>${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${bits.join(" + ")}</small></span><b>${money(c.total)}</b></div>`;
+  }).join("") || '<p class="note">None yet.</p>';
+  $("payNote").textContent = state.settings.pay.regPayday ? "" : "Add your regular commission payday in Settings → Paydays so it's included in your checks.";
 }
 
 /* ---------- settings form ---------- */
@@ -486,14 +665,45 @@ function fillSettings(){
   while(tiers.length<3) tiers.push({min:"",amt:""});
   $("tierBox").innerHTML=tiers.map((t,i)=>`<input aria-label="Tier ${i+1} minimum RVOL" class="tmin" inputmode="decimal" value="${esc(t.min)}" placeholder="RVOL"><input aria-label="Tier ${i+1} amount" class="tamt" inputmode="numeric" value="${esc(t.amt)}" placeholder="$">`).join("");
   $("setKey").value=getApiKey();
+  const m=s.mentor, py=s.pay;
+  const pairs=(tiers,cls,unit)=>{ const t=[...(tiers||[])].sort((a,b)=>a.min-b.min); while(t.length<2) t.push({min:"",amt:""});
+    return t.map((x,i)=>`<input aria-label="${unit} tier ${i+1}" class="${cls}min" inputmode="numeric" value="${esc(x.min)}" placeholder="${unit}"><input aria-label="${unit} tier ${i+1} bonus" class="${cls}amt" inputmode="decimal" value="${esc(x.amt)}" placeholder="$">`).join(""); };
+  $("apptTierBox").innerHTML=pairs(m.apptTiers,"ap","Appointments");
+  $("countTierBox").innerHTML=pairs(m.countTiers,"ct","Sales");
+  $("setBigRvol").value=m.bigRvol; $("setBigAmt").value=m.bigSaleAmt; $("setConfAmt").value=m.confirmAmt; $("setBigConfAmt").value=m.bigConfirmAmt;
+  $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegStart").value=py.regStart||"";
+  regHint();
 }
+function regHint(){
+  const a=$("setRegStart").value;
+  $("regHint").textContent=a ? "Each regular check pays 2 weeks of sales, like "+nice(a)+" – "+nice(addDays(a,13))+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
+}
+$("setRegPay").addEventListener("change",()=>{
+  const d=$("setRegPay").value;
+  if(d && !$("setRegStart").value){ const w=weekBounds(d)[0]; $("setRegStart").value=addDays(w,-14); }
+  regHint();
+});
+$("setRegStart").addEventListener("change",regHint);
+function readTiers(cls){
+  const mins=[...document.querySelectorAll("."+cls+"min")].map(i=>parseFloat(i.value));
+  const amts=[...document.querySelectorAll("."+cls+"amt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
+  return mins.map((x,i)=>({min:x,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
+}
+const numIn=(id,fallback)=>{ const v=parseFloat(String($(id).value).replace(/[$,]/g,"")); return isNaN(v)?fallback:v; };
 $("saveSettings").addEventListener("click", async()=>{
   const mins=[...document.querySelectorAll(".tmin")].map(i=>parseFloat(i.value));
   const amts=[...document.querySelectorAll(".tamt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
   const tiers=mins.map((m,i)=>({min:m,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
   const terms=$("setTerms").value.split(",").map(x=>x.trim()).filter(Boolean);
   if(!terms.length){ toast("Add at least one BC name or number."); return; }
-  state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value) };
+  const regPayday=$("setRegPay").value, regStart=$("setRegStart").value;
+  if(!!regPayday !== !!regStart){ toast("Fill in both regular payday dates, or leave both empty."); return; }
+  const dm=DEFAULT_SETTINGS.mentor;
+  state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value),
+    mentor:{ apptTiers:readTiers("ap"), countTiers:readTiers("ct"), bigRvol:numIn("setBigRvol",dm.bigRvol), bigSaleAmt:numIn("setBigAmt",0),
+      confirmAmt:numIn("setConfAmt",0), bigConfirmAmt:numIn("setBigConfAmt",0) },
+    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regStart } };
+  mentorWs=null;
   await putSettings(); toast(storageOk?"Settings saved.":"Couldn't save settings on this device.");
   render();
 });
@@ -506,7 +716,7 @@ $("clearKey").addEventListener("click",()=>{ setApiKey(""); $("setKey").value=""
 
 /* ---------- backup / restore ---------- */
 $("backupBtn").addEventListener("click", async()=>{
-  const data={app:"sales-tracker", version:1, exportedAt:new Date().toISOString(), settings:state.settings, sales:Object.fromEntries(state.sales)};
+  const data={app:"sales-tracker", version:2, exportedAt:new Date().toISOString(), settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring};
   const name="sales-tracker-backup-"+todayISO()+".json";
   const r=await deliverFile(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}), name);
   if(r==="saved") toast("Backup saved ("+state.sales.size+" sales).");
@@ -517,7 +727,10 @@ $("restoreIn").addEventListener("change", async e=>{
   let o;
   try{ o=JSON.parse(await f.text()); }catch(err){ toast("That file isn't a tracker backup."); return; }
   const incoming=Array.isArray(o.sales)?o.sales:Object.values(o.sales||{});
-  if(!incoming.length && !o.settings){ toast("That file isn't a tracker backup."); return; }
+  if(!incoming.length && !o.settings && !o.mentoring){ toast("That file isn't a tracker backup."); return; }
+  if(o.mentoring && typeof o.mentoring==="object"){
+    for(const [k,v] of Object.entries(o.mentoring)){ const cur=state.mentoring[k]; if(!cur || (!cur.appts && !cur.extra && !cur.note)) state.mentoring[k]=v; }
+  }
   let added=0, updated=0;
   for(const s of incoming){
     if(!s || !s.pn || !s.saleDate) continue;
@@ -527,7 +740,7 @@ $("restoreIn").addEventListener("change", async e=>{
     old?updated++:added++;
   }
   if(o.settings && confirm("Also use the settings from this backup (BC name, tiers, week start)?")){
-    state.settings=Object.assign(structuredClone(DEFAULT_SETTINGS), o.settings); fillSettings();
+    state.settings=mergeSettings(o.settings); fillSettings();
   }
   saveLocal(); render();
   toast("Restored: "+added+" added, "+updated+" updated.");
@@ -574,10 +787,12 @@ function openEdit(id){
   $("fSale").value=s.saleDate; $("fPn").value=s.pn; $("fRvol").value=s.rvol; $("fFee").value=s.fee;
   $("fPar").value=s.par||""; $("fRep").value=s.rep||""; $("fRun").value=s.runDate||""; $("fAppt").value=s.apptDate||"";
   $("fCo").value=s.company||""; $("fTaken").value=s.takenBy||""; $("fBc").value=s.bc||""; $("fNote").value=s.note||"";
-  $("f44").checked=!!s.c44;
+  $("f44").checked=!!s.c44; $("fConf").checked=!!s.confirmed;
   dlg.showModal();
 }
 document.addEventListener("click",e=>{
+  const cf=e.target.closest("[data-conf]");
+  if(cf){ const s=state.sales.get(cf.dataset.conf); if(s){ putSale(Object.assign({},s,{confirmed:!s.confirmed})); render(); toast(s.confirmed?"Marked not confirmed.":"Marked confirmed."); } return; }
   const el=e.target.closest("[data-id]"); if(el && (el.closest("#cards")||el.closest("#tableWrap"))) openEdit(el.dataset.id);
 });
 $("addBtn").onclick=()=>openEdit(null);
@@ -593,7 +808,7 @@ $("editForm").addEventListener("submit", async e=>{
     saleDate:$("fSale").value, pn:$("fPn").value.trim(), rvol:isNaN(rv)?$("fRvol").value.trim():rv.toFixed(1),
     fee:Number(String($("fFee").value).replace(/[$,]/g,""))||0, par:$("fPar").value.trim(), rep:$("fRep").value.trim(),
     runDate:mdy($("fRun").value), apptDate:mdy($("fAppt").value), company:$("fCo").value.trim(), takenBy:$("fTaken").value.trim(),
-    bc:$("fBc").value.trim(), note:$("fNote").value.trim(), c44:$("f44").checked, source:"edited by hand"
+    bc:$("fBc").value.trim(), note:$("fNote").value.trim(), c44:$("f44").checked, confirmed:$("fConf").checked, source:"edited by hand"
   };
   if(state.editingId && safeId(sale.pn)!==state.editingId) await removeSale(state.editingId);
   await putSale(sale); toast(storageOk?"Sale saved.":"Couldn't save on this device.");
@@ -760,6 +975,7 @@ async function extract(file){
     };
     if(!parsed.saleDate) sale.note=(sale.note?sale.note+"; ":"")+"Sale date not found in log";
     const id=safeId(sale.pn); const old=state.sales.get(id);
+    sale.confirmed=!!(old && old.confirmed);
     if(old){
       if(old.saleDate>sale.saleDate){ same++; continue; }   // keep the newer report's version
       if(old.saleDate<sale.saleDate) sale.note=[sale.note,"Also on "+short(old.saleDate)+" log"].filter(Boolean).join("; ");
