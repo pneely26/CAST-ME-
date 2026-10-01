@@ -141,6 +141,19 @@ details.paylist{margin-top:12px}
 details.paylist summary{cursor:pointer;font-weight:600;font-size:.92rem;padding:4px 0}
 .payrow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:.9rem}
 .payrow small{display:block;color:var(--muted);font-size:.8rem}
+details.check{border-top:1px solid var(--line)}
+details.check>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;cursor:pointer;font-size:.92rem}
+details.check>summary::-webkit-details-marker{display:none}
+details.check>summary::before{content:"▸";color:var(--muted);margin-right:-4px}
+details.check[open]>summary::before{content:"▾"}
+details.check>summary .when{flex:1}
+details.check>summary small{display:block;color:var(--muted);font-size:.8rem}
+details.check .body{padding:0 0 12px 14px}
+.salelist{list-style:none;margin:2px 0 6px;padding:0;font-size:.82rem;color:var(--muted)}
+.salelist li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border:0}
+.mlines li.tot{font-weight:800;border-top:2px solid var(--brand)}
+.mlines li.tax{color:var(--muted)}
+.taxpreview{margin-top:8px}
 .sale .co{font-weight:700}
 .sale .comm{font-weight:800;font-stretch:75%;font-size:1.25rem;text-align:right}
 .sale .meta{grid-column:1/-1;color:var(--muted);font-size:.86rem;display:flex;gap:4px 14px;flex-wrap:wrap}
@@ -270,11 +283,11 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
   </section>
 
   <section class="panel" id="payCard">
-    <div class="panelhead"><h2>Paychecks</h2><span class="sub">Before taxes and deductions</span></div>
+    <div class="panelhead"><h2>Paychecks</h2><span class="sub">Taxes are an estimate</span></div>
     <div id="payNext"></div>
-    <details class="paylist"><summary>Other paydays</summary><div id="payList"></div></details>
+    <details class="paylist" id="payHistory"><summary id="payHistTitle">Every payday</summary><div id="payList"></div></details>
     <p class="note" id="payNote"></p>
-    <button class="btn ghost" id="editPaydays" style="margin-top:10px">Change paydays</button>
+    <div class="dlgactions"><button class="btn ghost" id="editPaydays">Change paydays</button><button class="btn ghost" id="editTaxes">Tax settings</button></div>
   </section>
 
   <section class="weeks" id="weeks" aria-label="Your weeks"></section>
@@ -357,6 +370,22 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       <div class="field"><label for="setRegEnd">Last sale date that check pays for</label><input type="date" id="setRegEnd"></div>
     </div>
     <span class="note" id="regHint">Regular commission is paid every 2 weeks and covers 2 weeks of sales.</span>
+
+    <h3 id="taxesHead">Taxes (estimate)</h3>
+    <div class="tiers">
+      <div class="field"><label for="taxFed">Federal income tax (%)</label><input id="taxFed" inputmode="decimal"></div>
+      <div class="field"><label for="taxState">State income tax (%)</label><input id="taxState" inputmode="decimal"></div>
+      <div class="field"><label for="taxSS">Social Security (%)</label><input id="taxSS" inputmode="decimal"></div>
+      <div class="field"><label for="taxMed">Medicare (%)</label><input id="taxMed" inputmode="decimal"></div>
+      <div class="field"><label for="taxLocal">City / local tax (%)</label><input id="taxLocal" inputmode="decimal"></div>
+      <div class="field"><label for="taxOther">Other deductions per check ($)</label><input id="taxOther" inputmode="decimal"></div>
+    </div>
+    <span class="note">Federal starts at 22%, the flat rate employers often withhold from commissions and bonuses. Social Security (6.2%) and Medicare (1.45%) are standard. Add your state's rate, and anything else taken out of each check (insurance, 401k). The easiest way to get exact numbers: match these to a real pay stub.</span>
+    <div class="field taxpreview">
+      <label for="taxTry">Try it: a check of ($)</label>
+      <input id="taxTry" inputmode="decimal" placeholder="1000">
+      <span class="note" id="taxTryOut"></span>
+    </div>
     <div class="dlgactions">
       <button class="btn" id="saveSettings">Save settings</button>
     </div>
@@ -458,7 +487,9 @@ const DEFAULT_SETTINGS = {
   },
   // Mentoring paid every Friday for the week before. Regular commission every other Friday:
   // the Oct 9, 2026 check pays sales through Fri Oct 2 (the 2 weeks ending that day).
-  pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" }
+  pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" },
+  // Estimated withholding, in percent of each check (other = dollars per check).
+  tax: { fed: 22, state: 0, ss: 6.2, med: 1.45, local: 0, other: 0 }
 };
 function mergeSettings(o){
   const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
@@ -467,7 +498,7 @@ function mergeSettings(o){
   if(!pay.regEnd && pay.regStart) pay.regEnd = pay.regStart==="2026-09-21" ? "2026-10-02" : addDays(pay.regStart,13);
   delete pay.regStart;
   if(!pay.regPayday || !pay.regEnd){ pay.regPayday=d.pay.regPayday; pay.regEnd=d.pay.regEnd; }
-  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay});
+  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay, tax:Object.assign(d.tax, o.tax||{})});
 }
 const MODEL = "claude-opus-5-5";
 
@@ -548,11 +579,20 @@ function regPeriodFor(day){
   const k=dayDiff(p.regPayday,day); if(k%14!==0) return null;
   const end=addDays(p.regEnd,k); return [addDays(end,-13), end];
 }
+function taxesOn(gross, t){
+  t=t||state.settings.tax;
+  const pct=[["Federal income tax",t.fed],["State income tax",t.state],["Social Security",t.ss],["Medicare",t.med],["City / local tax",t.local]];
+  const lines=pct.filter(([,r])=>Number(r)>0).map(([label,r])=>({label:label+" ("+Number(r)+"%)", amt:Math.round(gross*Number(r))/100}));
+  if(gross>0 && Number(t.other)>0) lines.push({label:"Other deductions", amt:Number(t.other)});
+  const total=lines.reduce((a,l)=>a+l.amt,0);
+  return {lines, total, net:Math.max(0,gross-total)};
+}
+const cents = n => "$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 function paycheckOn(day){
   let mentor=null, reg=null;
   if(parseISO(day).getDay()===Number(state.settings.pay.mentorDay)) mentor=mentorWeek(addDays(weekBounds(day)[0],-7));
   const per=regPeriodFor(day);
-  if(per){ const list=salesBetween(per[0],per[1]); reg={from:per[0], to:per[1], n:list.length, amt:list.reduce((t,s)=>t+(commission(s.rvol)||0),0)}; }
+  if(per){ const list=salesBetween(per[0],per[1]).sort((a,b)=>a.saleDate.localeCompare(b.saleDate)); reg={from:per[0], to:per[1], n:list.length, list, amt:list.reduce((t,s)=>t+(commission(s.rvol)||0),0)}; }
   if(!mentor && !reg) return null;
   return {date:day, mentor, reg, total:(mentor?mentor.total:0)+(reg?reg.amt:0)};
 }
@@ -721,9 +761,14 @@ function saveMentorInputs(){
 
 /* ---------- paychecks ---------- */
 $("editPaydays").addEventListener("click",()=>{ $("settings").open=true; $("paydaysHead").scrollIntoView({behavior:"smooth",block:"start"}); });
+$("editTaxes").addEventListener("click",()=>{ $("settings").open=true; $("taxesHead").scrollIntoView({behavior:"smooth",block:"start"}); });
 function renderPay(){
   const today=todayISO(), checks=[];
-  for(let i=-42;i<=28;i++){ const c=paycheckOn(addDays(today,i)); if(c) checks.push(c); }
+  // every payday from your first sale (or mentoring entry) through the next 4 weeks
+  let first=addDays(today,-42);
+  for(const s of state.sales.values()) if(s.saleDate && s.saleDate<first) first=s.saleDate;
+  for(const k of Object.keys(state.mentoring)) if(k<first) first=k;
+  for(let d=first, end=addDays(today,28); d<=end; d=addDays(d,1)){ const c=paycheckOn(d); if(c) checks.push(c); }
   const next=checks.find(c=>c.date>=today);
   const fmt=d=>parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
   const unfinished=c=>(c.mentor && c.mentor.we>=today) || (c.reg && c.reg.to>=today);
@@ -733,13 +778,38 @@ function renderPay(){
     if(c.reg) h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}</small></span><b>${money(c.reg.amt)}</b></li>`;
     return h;
   };
+  const taxBlock=c=>{
+    const tx=taxesOn(c.total);
+    return `<li class="tot"><span>Gross pay</span><b>${cents(c.total)}</b></li>`
+      + tx.lines.map(l=>`<li class="tax"><span>${esc(l.label)}</span><b>−${cents(l.amt)}</b></li>`).join("")
+      + `<li class="tot"><span>Take-home (estimate)</span><b>${cents(tx.net)}</b></li>`;
+  };
+  const detail=c=>{
+    let h="";
+    if(c.mentor){
+      const m=c.mentor, bits=[];
+      if(m.lines.appts) bits.push(m.appts+" appointments "+money(m.lines.appts));
+      if(m.lines.big) bits.push(m.big+" five mill "+money(m.lines.big));
+      if(m.lines.count) bits.push(m.n+" sales "+money(m.lines.count));
+      if(m.lines.conf) bits.push((m.confReg+m.confBig)+" confirmed "+money(m.lines.conf));
+      if(m.extra) bits.push("other "+money(m.extra));
+      h+=`<li><span>Mentoring bonus<small>Week of ${nice(m.ws)} – ${nice(m.we)}${bits.length?" · "+esc(bits.join(", ")):""}</small></span><b>${money(m.total)}</b></li>`;
+    }
+    if(c.reg){
+      h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}</small>`
+        + (c.reg.list.length?`<ul class="salelist">${c.reg.list.map(s=>`<li><span>${esc(short(s.saleDate))} · ${esc(s.company||s.pn)} · RVOL ${esc(s.rvol)}</span><span>${money(commission(s.rvol)||0)}</span></li>`).join("")}</ul>`:"")
+        + `</span><b>${money(c.reg.amt)}</b></li>`;
+    }
+    return h+taxBlock(c);
+  };
   $("payNext").innerHTML = next
-    ? `<div class="sub">Next payday · ${esc(fmt(next.date))}${unfinished(next)?'<span class="est">So far</span>':""}</div><div class="mbig num">${money(next.total)}</div><ul class="mlines num">${parts(next)}</ul>`
+    ? `<div class="sub">Next payday · ${esc(fmt(next.date))}${unfinished(next)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(taxesOn(next.total).net)}</div><div class="sub">take-home, from ${money(next.total)} before taxes</div><ul class="mlines num">${detail(next)}</ul>`
     : `<p class="note">No paydays found. Check your paydays in Settings.</p>`;
   const others=checks.filter(c=>c!==next && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
+  $("payHistTitle").textContent="Every payday ("+others.length+")";
   $("payList").innerHTML=others.map(c=>{
-    const bits=[]; if(c.mentor) bits.push("Mentoring "+money(c.mentor.total)); if(c.reg) bits.push("Commission "+money(c.reg.amt));
-    return `<div class="payrow num"><span>${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${bits.join(" + ")}</small></span><b>${money(c.total)}</b></div>`;
+    const kind=c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring";
+    return `<details class="check"><summary class="num"><span class="when">${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${kind} · ${money(c.total)} before taxes</small></span><b>${cents(taxesOn(c.total).net)}</b></summary><div class="body"><ul class="mlines num">${detail(c)}</ul></div></details>`;
   }).join("") || '<p class="note">None yet.</p>';
   $("payNote").textContent = state.settings.pay.regPayday ? "" : "Add your regular commission payday in Settings → Paydays so it's included in your checks.";
 }
@@ -761,8 +831,15 @@ function fillSettings(){
   $("countTierBox").innerHTML=pairs(m.countTiers,"ct","Sales");
   $("setBigRvol").value=m.bigRvol; $("setBigAmt").value=m.bigSaleAmt; $("setConfAmt").value=m.confirmAmt; $("setBigConfAmt").value=m.bigConfirmAmt;
   $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegEnd").value=py.regEnd||"";
-  regHint();
+  const tx=s.tax; $("taxFed").value=tx.fed; $("taxState").value=tx.state; $("taxSS").value=tx.ss; $("taxMed").value=tx.med; $("taxLocal").value=tx.local; $("taxOther").value=tx.other;
+  regHint(); taxPreview();
 }
+function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fed:numIn("taxFed",0), state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), other:numIn("taxOther",0)}; }
+function taxPreview(){
+  const g=parseFloat(String($("taxTry").value).replace(/[$,]/g,""))||1000, tx=taxesOn(g, readTax());
+  $("taxTryOut").textContent="On "+cents(g)+": about "+cents(tx.total)+" in taxes and deductions, "+cents(tx.net)+" take-home.";
+}
+["taxFed","taxState","taxSS","taxMed","taxLocal","taxOther","taxTry"].forEach(id=>$(id).addEventListener("input",taxPreview));
 function regHint(){
   const e=$("setRegEnd").value;
   $("regHint").textContent=e ? "Each regular check pays the 2 weeks of sales ending that day, like "+nice(addDays(e,-13))+" – "+nice(e)+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
@@ -791,7 +868,7 @@ $("saveSettings").addEventListener("click", async()=>{
   state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value),
     mentor:{ apptTiers:readTiers("ap"), countTiers:readTiers("ct"), bigRvol:numIn("setBigRvol",dm.bigRvol), bigSaleAmt:numIn("setBigAmt",0),
       confirmAmt:numIn("setConfAmt",0), bigConfirmAmt:numIn("setBigConfAmt",0) },
-    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regEnd } };
+    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regEnd }, tax:readTax() };
   mentorWs=null;
   await putSettings(); toast(storageOk?"Settings saved.":"Couldn't save settings on this device.");
   render();
