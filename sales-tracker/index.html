@@ -154,6 +154,7 @@ details.check .body{padding:0 0 12px 14px}
 .mlines li.tot{font-weight:800;border-top:2px solid var(--brand)}
 .mlines li.tax{color:var(--muted)}
 .taxpreview{margin-top:8px}
+.paynext2{margin-top:18px;padding-top:14px;border-top:2px dashed var(--line)}
 .sale .co{font-weight:700}
 .sale .comm{font-weight:800;font-stretch:75%;font-size:1.25rem;text-align:right}
 .sale .meta{grid-column:1/-1;color:var(--muted);font-size:.86rem;display:flex;gap:4px 14px;flex-wrap:wrap}
@@ -799,16 +800,20 @@ function renderPay(){
       h+=`<li><span>Mentoring bonus<small>Week of ${nice(m.ws)} – ${nice(m.we)}${bits.length?" · "+esc(bits.join(", ")):""}</small></span><b>${money(m.total)}</b></li>`;
     }
     if(c.reg){
-      h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}</small>`
+      h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}${c.reg.n?"":" · no sales saved for these dates yet"}</small>`
         + (c.reg.list.length?`<ul class="salelist">${c.reg.list.map(s=>`<li><span>${esc(short(s.saleDate))} · ${esc(s.company||s.pn)} · RVOL ${esc(s.rvol)}</span><span>${money(commission(s.rvol)||0)}</span></li>`).join("")}</ul>`:"")
         + `</span><b>${money(c.reg.amt)}</b></li>`;
     }
     return h+taxBlock(c);
   };
-  $("payNext").innerHTML = next
-    ? `<div class="sub">Next payday · ${esc(fmt(next.date))}${unfinished(next)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(taxesOn(next.total).net)}</div><div class="sub">take-home, from ${money(next.total)} before taxes</div><ul class="mlines num">${detail(next)}</ul>`
+  // Show each upcoming payday up to and including the next commission check.
+  const upcoming=[];
+  for(const c of checks){ if(c.date<today) continue; upcoming.push(c); if(c.reg || upcoming.length>=3) break; }
+  const kindOf=c=>c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring bonus only";
+  $("payNext").innerHTML = upcoming.length
+    ? upcoming.map((c,i)=>`<div class="${i?"paynext2":""}"><div class="sub">${i?"Then":"Next payday"} · ${esc(fmt(c.date))} · ${kindOf(c)}${unfinished(c)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(taxesOn(c.total).net)}</div><div class="sub">take-home, from ${money(c.total)} before taxes</div><ul class="mlines num">${detail(c)}</ul></div>`).join("")
     : `<p class="note">No paydays found. Check your paydays in Settings.</p>`;
-  const others=checks.filter(c=>c!==next && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
+  const others=checks.filter(c=>!upcoming.includes(c) && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
   $("payHistTitle").textContent="Every payday ("+others.length+")";
   $("payList").innerHTML=others.map(c=>{
     const kind=c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring";

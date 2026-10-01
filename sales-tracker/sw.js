@@ -1,5 +1,5 @@
 // Offline support: the page loads fresh when online; other files come from cache and refresh in the background.
-const CACHE = "sales-tracker-v10";
+const CACHE = "sales-tracker-v11";
 const APP = [
   "./", "index.html", "manifest.webmanifest",
   "vendor/pdf.min.js", "vendor/pdf.worker.min.js", "vendor/pdf-lib.min.js", "vendor/anthropic.min.js",
