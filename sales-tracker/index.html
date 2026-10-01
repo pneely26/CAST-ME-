@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sales &amp; Commission Tracker</title>
+<meta name="description" content="Track your sales and weekly commission. Upload sales logs, edit sales, and save reports.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#15233F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commission">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="vendor/anthropic.min.js"></script>
+<style>
+:root{
+  --paper:#EEF1F4; --card:#FFFFFF; --ink:#15233F; --muted:#5B6A80; --line:#D3DAE3;
+  --gold:#F0B429; --gold-ink:#3D2C00; --ok:#23704F; --warn:#A6451B; --focus:#2F6FEB;
+  --row:#F6F8FA;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1524; --card:#162138; --ink:#E6EBF2; --muted:#9AA8BD; --line:#2A3A57;
+    --gold:#F0B429; --gold-ink:#2B1F00; --ok:#5CC495; --warn:#F08A5D; --focus:#7AA7FF; --row:#1B2843;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1524; --card:#162138; --ink:#E6EBF2; --muted:#9AA8BD; --line:#2A3A57;
+  --gold:#F0B429; --gold-ink:#2B1F00; --ok:#5CC495; --warn:#F08A5D; --focus:#7AA7FF; --row:#1B2843;
+  color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--paper)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 64px}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* Header */
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top h1{margin:0;font-size:1.05rem;font-weight:700;font-stretch:100%;letter-spacing:.01em}
+.store{font-size:.8rem;color:var(--muted)}
+.store.bad{color:var(--warn);font-weight:600}
+
+/* Banner (API key / install) */
+.banner{margin-top:12px;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:.92rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner[hidden]{display:none}
+.banner p{margin:0;flex:1 1 220px}
+
+/* Hero: the week's commission, printed like a pay stub total */
+.hero{margin:14px 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--gold)}
+.weeknav{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.weeknav .label{font-weight:600;font-size:1rem}
+.iconbtn{appearance:none;border:1px solid var(--line);background:transparent;border-radius:10px;width:40px;height:40px;cursor:pointer;font-size:1.1rem;line-height:1}
+.iconbtn:hover{background:var(--row)}
+.big{font-stretch:62%;font-weight:800;font-size:clamp(3.4rem,14vw,5.5rem);line-height:.95;margin:12px 0 2px;letter-spacing:-.01em}
+.big small{font-size:.38em;font-weight:600;font-stretch:100%;color:var(--muted);margin-left:6px;letter-spacing:0}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:.92rem}
+.stats b{color:var(--ink);font-weight:700;font-size:1.05rem}
+.rangebar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.chip{appearance:none;border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:.85rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.custom{display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:.9rem}
+.custom.on{display:flex}
+.custom input{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 8px}
+
+/* Weeks overview */
+.weeks{display:grid;gap:6px;margin:-4px 0 18px}
+.weeks h2{margin:0 0 2px;font-size:.9rem;color:var(--muted);font-weight:600}
+.wk{appearance:none;display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+.wk:hover{border-color:var(--muted)}
+.wk[aria-current="true"]{border-color:var(--ink);box-shadow:inset 4px 0 0 var(--gold)}
+.wk .wl{font-weight:600}
+.wk .wn{color:var(--muted);font-size:.88rem}
+.wk .wc{font-weight:800;font-stretch:75%;font-size:1.15rem}
+
+/* Upload */
+.drop{display:block;border:2px dashed var(--line);border-radius:14px;padding:20px 16px;text-align:center;background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--ink)}
+.drop strong{display:block;font-size:1.1rem}
+.drop span{color:var(--muted);font-size:.9rem}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.log{list-style:none;margin:10px 0 0;padding:0;font-size:.9rem}
+.log li{padding:8px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);margin-top:6px}
+.log li.err{border-color:var(--warn);color:var(--warn)}
+.log li .f{font-weight:600}
+
+/* Actions */
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 10px;align-items:center}
+.btn{appearance:none;border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.danger{background:transparent;color:var(--warn);border-color:var(--warn)}
+.btn:disabled{opacity:.5;cursor:default}
+.spacer{flex:1}
+
+/* Sales list */
+.day{margin-top:16px}
+.day h3{margin:0 0 6px;font-size:.85rem;font-weight:700;color:var(--muted);display:flex;justify-content:space-between}
+.sale{display:grid;grid-template-columns:1fr auto;gap:2px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px;cursor:pointer;text-align:left;width:100%;appearance:none}
+.sale:hover{border-color:var(--muted)}
+.sale .co{font-weight:700}
+.sale .comm{font-weight:800;font-stretch:75%;font-size:1.25rem;text-align:right}
+.sale .meta{grid-column:1/-1;color:var(--muted);font-size:.86rem;display:flex;gap:4px 14px;flex-wrap:wrap}
+.flag{color:var(--warn);font-weight:600}
+.tick{color:var(--ok);font-weight:700}
+.empty{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
+
+/* Desktop table */
+.tablewrap{display:none;overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:.78rem;color:var(--muted);font-weight:700;position:sticky;top:0;background:var(--card)}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--row)}
+td.r,th.r{text-align:right}
+td.c,th.c{text-align:center}
+tr.newday td{border-top:2px solid var(--ink)}
+tfoot td{font-weight:700;background:var(--row)}
+@media (min-width:820px){ .tablewrap{display:block} .cards{display:none} }
+
+/* Settings */
+details.settings{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 16px}
+details.settings summary{cursor:pointer;padding:12px 0;font-weight:600}
+details.settings h3{margin:22px 0 4px;font-size:.95rem}
+.field{display:grid;gap:4px;margin:10px 0}
+.field label{font-size:.85rem;color:var(--muted)}
+.field input,.field select{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 10px;width:100%}
+.tiers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.note{font-size:.82rem;color:var(--muted)}
+.note a{color:inherit}
+.hidden-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Dialog */
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:0;width:min(560px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(10,16,30,.5)}
+.dlg{padding:18px}
+.dlg h2{margin:0 0 8px;font-size:1.15rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.check{display:flex;align-items:center;gap:8px;margin:12px 0}
+.check input{width:20px;height:20px}
+.dlgactions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* Print: only the report */
+#printArea{display:none}
+@media print{
+  body{background:#fff;color:#000}
+  .wrap{display:none}
+  #printArea{display:block;font-family:Helvetica,Arial,sans-serif}
+  #printArea h1{font-size:16pt;margin:0 0 2pt;color:#1F3B66;text-align:center}
+  #printArea p{margin:0 0 8pt;text-align:center;color:#555;font-size:9pt}
+  #printArea table{font-size:8pt;width:100%}
+  #printArea th{background:#1F3B66;color:#fff;position:static}
+  #printArea td,#printArea th{border:1px solid #B8C2D1;padding:3pt 4pt}
+  #printArea .foot{font-size:7.5pt;color:#444;text-align:left;margin-top:6pt}
+  @page{size:landscape;margin:.4in}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Sales &amp; commission tracker</h1>
+    <span class="store" id="storeNote">Saved on this device</span>
+  </div>
+
+  <div class="banner" id="installBanner" hidden>
+    <p>Install the tracker so it opens like an app, even offline.</p>
+    <button class="btn" id="installBtn">Install</button>
+  </div>
+
+  <section class="hero" aria-live="polite">
+    <div class="weeknav">
+      <button class="iconbtn" id="prevWk" aria-label="Previous week">‹</button>
+      <span class="label" id="rangeLabel">This week</span>
+      <button class="iconbtn" id="nextWk" aria-label="Next week">›</button>
+    </div>
+    <div class="big num" id="bigComm">$0<small>commission</small></div>
+    <div class="stats num">
+      <span><b id="stSales">0</b> sales</span>
+      <span><b id="stRvol">0.0</b> RVOL</span>
+      <span><b id="stFee">$0</b> in fees</span>
+    </div>
+    <div class="rangebar" role="group" aria-label="Date range">
+      <button class="chip" id="modeWeek" aria-pressed="true">Week</button>
+      <button class="chip" id="modeCustom" aria-pressed="false">Custom dates</button>
+      <button class="chip" id="modeAll" aria-pressed="false">All sales</button>
+    </div>
+    <div class="custom" id="customBox">
+      <label>From <input type="date" id="fromDate"></label>
+      <label>To <input type="date" id="toDate"></label>
+    </div>
+  </section>
+
+  <section class="weeks" id="weeks" aria-label="Your weeks"></section>
+
+  <label class="drop" id="drop">
+    <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple>
+    <strong>Upload sales logs</strong>
+    <span>Tap to choose PDFs, or drop them here. Your sales are pulled out and added automatically.</span>
+  </label>
+  <ul class="log" id="log"></ul>
+
+  <div class="actions">
+    <button class="btn" id="savePdf">Save PDF</button>
+    <button class="btn ghost" id="printBtn">Print</button>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="addBtn">Add a sale by hand</button>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="tablewrap" id="tableWrap"></div>
+
+  <details class="settings" id="settings">
+    <summary>Settings</summary>
+    <div class="field">
+      <label for="setTerms">Your BC as it appears in the logs (separate with commas)</label>
+      <input id="setTerms" placeholder="Floyd-Burnett, 104040">
+    </div>
+    <div class="field">
+      <label for="setLabel">BC name printed on your reports</label>
+      <input id="setLabel" placeholder="Floyd-Burnett (104040)">
+    </div>
+    <div class="field">
+      <label>Commission tiers (RVOL at or above → amount)</label>
+      <div class="tiers" id="tierBox"></div>
+      <span class="note">Sales below the lowest tier earn $0 and are flagged.</span>
+    </div>
+    <div class="field">
+      <label for="setWeek">Week starts on</label>
+      <select id="setWeek">
+        <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+        <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+      </select>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="saveSettings">Save settings</button>
+    </div>
+
+    <h3>Reading sales logs</h3>
+    <div class="field">
+      <label for="setKey">Anthropic API key</label>
+      <input id="setKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+      <span class="note">Logs are read by Claude using your own key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. The key stays on this device and is only sent to Anthropic. Not needed for adding sales by hand.</span>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="saveKey">Save key</button>
+      <button class="btn ghost" id="clearKey">Remove key</button>
+    </div>
+
+    <h3>Backup and other devices</h3>
+    <p class="note">Your sales are saved in this browser only. To move them to another phone or computer, download a backup here and restore it there. Restoring adds to what's already saved.</p>
+    <div class="dlgactions" style="margin-bottom:14px">
+      <button class="btn ghost" id="backupBtn">Download backup</button>
+      <button class="btn ghost" id="restoreBtn">Restore from backup</button>
+      <input type="file" id="restoreIn" class="hidden-input" accept="application/json,.json" tabindex="-1" aria-hidden="true">
+    </div>
+    <p class="note" id="iosHint" hidden>To add this to your home screen on iPhone: tap the Share button in Safari, then “Add to Home Screen”.</p>
+  </details>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog" id="editForm">
+    <h2 id="dlgTitle">Edit sale</h2>
+    <div class="grid2">
+      <div class="field"><label for="fSale">Sale date</label><input type="date" id="fSale" required></div>
+      <div class="field"><label for="fPn">PN-Appt</label><input id="fPn" required></div>
+      <div class="field"><label for="fRvol">RVOL</label><input id="fRvol" inputmode="decimal" required></div>
+      <div class="field"><label for="fFee">Fee</label><input id="fFee" inputmode="numeric"></div>
+      <div class="field"><label for="fPar">Par</label><input id="fPar"></div>
+      <div class="field"><label for="fRep">Sales rep</label><input id="fRep"></div>
+      <div class="field"><label for="fRun">Run date</label><input id="fRun" placeholder="MM/DD/YY"></div>
+      <div class="field"><label for="fAppt">Appt date</label><input id="fAppt" placeholder="MM/DD/YY"></div>
+      <div class="field"><label for="fCo">Company</label><input id="fCo"></div>
+      <div class="field"><label for="fTaken">Taken by</label><input id="fTaken"></div>
+      <div class="field"><label for="fBc">BC</label><input id="fBc"></div>
+      <div class="field"><label for="fNote">Note</label><input id="fNote"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="f44"> 44 checked</label>
+    <div class="dlgactions">
+      <button class="btn" id="dlgSave" value="save">Save</button>
+      <button class="btn ghost" id="dlgCancel" value="cancel" formnovalidate>Cancel</button>
+      <span class="spacer"></span>
+      <button class="btn danger" id="dlgDelete" value="delete" formnovalidate>Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="printArea"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------- defaults ---------- */
+const DEFAULT_SETTINGS = {
+  bcTerms: ["Floyd-Burnett", "104040"],
+  bcLabel: "Floyd-Burnett (104040)",
+  tiers: [{min:5, amt:546}, {min:2, amt:318}, {min:1, amt:67}],
+  weekStart: 1
+};
+const MODEL = "claude-opus-5-5";
+
+const state = {
+  sales: new Map(),           // id -> sale
+  settings: structuredClone(DEFAULT_SETTINGS),
+  mode: "week",               // week | custom | all
+  weekAnchor: todayISO(),
+  from: null, to: null,
+  editingId: null
+};
+
+/* ---------- date helpers ---------- */
+function todayISO(){ const d=new Date(); return iso(d); }
+function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function parseISO(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d,12); }
+function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
+function short(s){ if(!s) return ""; const [y,m,d]=s.split("-"); return m+"/"+d+"/"+y.slice(2); }
+function nice(s){ return parseISO(s).toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
+// any date-ish string -> MM/DD/YY
+function mdy(s){
+  if(!s) return "";
+  const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return String(s).trim();
+  return m[1].padStart(2,"0")+"/"+m[2].padStart(2,"0")+"/"+m[3].slice(-2);
+}
+function mdyToISO(s){
+  const m = String(s||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return null;
+  let y = m[3].length===2 ? "20"+m[3] : m[3];
+  return y+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");
+}
+function weekBounds(anchor){
+  const d=parseISO(anchor); const diff=(d.getDay()-state.settings.weekStart+7)%7;
+  const start=addDays(anchor,-diff); return [start, addDays(start,6)];
+}
+function currentRange(){
+  if(state.mode==="week") return weekBounds(state.weekAnchor);
+  if(state.mode==="custom") return [state.from||"0000-01-01", state.to||"9999-12-31"];
+  return ["0000-01-01","9999-12-31"];
+}
+
+/* ---------- money ---------- */
+const money = n => "$"+Math.round(n).toLocaleString("en-US");
+function commission(rvol){
+  const v=parseFloat(rvol); if(isNaN(v)) return null;
+  const tiers=[...state.settings.tiers].filter(t=>!isNaN(t.min)).sort((a,b)=>b.min-a.min);
+  for(const t of tiers) if(v>=t.min) return t.amt;
+  return null;
+}
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),3200); }
+
+/* ---------- storage (this device) ---------- */
+const LS_KEY="salesTracker.v1", KEY_KEY="salesTracker.apiKey";
+let storageOk=true;
+function safeId(pn){ return String(pn).trim().replace(/[^A-Za-z0-9_\-.~:@+]/g,"_").slice(0,180) || ("s"+Date.now()); }
+function loadLocal(){
+  try{
+    const raw=localStorage.getItem(LS_KEY); if(!raw) return;
+    const o=JSON.parse(raw);
+    if(o.settings) state.settings=Object.assign(structuredClone(DEFAULT_SETTINGS),o.settings);
+    state.sales=new Map(Object.entries(o.sales||{}));
+  }catch(e){ storageOk=false; }
+}
+function saveLocal(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({settings:state.settings, sales:Object.fromEntries(state.sales)})); storageOk=true; }
+  catch(e){ storageOk=false; }
+  showStoreNote();
+}
+function showStoreNote(){
+  const n=$("storeNote");
+  n.textContent=storageOk?"Saved on this device":"This browser isn't letting the tracker save. Private browsing may be on.";
+  n.classList.toggle("bad",!storageOk);
+}
+async function putSale(sale){
+  const id=safeId(sale.pn); sale.id=id; sale.updatedAt=new Date().toISOString();
+  state.sales.set(id,sale); saveLocal();
+}
+async function removeSale(id){ state.sales.delete(id); saveLocal(); }
+async function putSettings(){ saveLocal(); }
+
+function getApiKey(){ try{ return localStorage.getItem(KEY_KEY)||""; }catch(e){ return ""; } }
+function setApiKey(k){ try{ if(k) localStorage.setItem(KEY_KEY,k); else localStorage.removeItem(KEY_KEY); return true; }catch(e){ return false; } }
+
+/* ---------- rendering ---------- */
+function salesInRange(){
+  const [a,b]=currentRange();
+  return [...state.sales.values()].filter(s=>s.saleDate>=a && s.saleDate<=b)
+    .sort((x,y)=> x.saleDate.localeCompare(y.saleDate) || (x.rep||"").localeCompare(y.rep||"") || (x.company||"").localeCompare(y.company||""));
+}
+function rangeText(){
+  const [a,b]=currentRange();
+  if(state.mode==="all"){
+    const all=[...state.sales.values()].map(s=>s.saleDate).sort();
+    return all.length ? nice(all[0])+" – "+nice(all[all.length-1]) : "All sales";
+  }
+  if(state.mode==="custom" && (!state.from||!state.to)) return "Pick dates";
+  return nice(a)+" – "+nice(b);
+}
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderWeeks(){
+  const byWeek=new Map();
+  for(const s of state.sales.values()){ if(!s.saleDate) continue; const [a]=weekBounds(s.saleDate); const w=byWeek.get(a)||{n:0,c:0}; w.n++; w.c+=commission(s.rvol)||0; byWeek.set(a,w); }
+  const keys=[...byWeek.keys()].sort().reverse();
+  if(!keys.length){ $("weeks").innerHTML=""; return; }
+  const cur=state.mode==="week"?weekBounds(state.weekAnchor)[0]:null;
+  $("weeks").innerHTML="<h2>Your weeks</h2>"+keys.map(k=>{ const w=byWeek.get(k);
+    return `<button class="wk" data-week="${k}" aria-current="${k===cur}"><span><span class="wl">${nice(k)} – ${nice(addDays(k,6))}</span><br><span class="wn">${w.n} sale${w.n===1?"":"s"}</span></span><span class="wc num">${money(w.c)}</span></button>`; }).join("");
+}
+$("weeks").addEventListener("click",e=>{ const b=e.target.closest("[data-week]"); if(!b) return; state.weekAnchor=b.dataset.week; setMode("week"); });
+
+function render(){
+  renderWeeks();
+  const list=salesInRange();
+  let tc=0,tr=0,tf=0, flagged=0;
+  for(const s of list){ const c=commission(s.rvol); if(c==null) flagged++; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; }
+  $("rangeLabel").textContent=rangeText();
+  $("bigComm").innerHTML=money(tc)+"<small>commission</small>";
+  $("stSales").textContent=list.length; $("stRvol").textContent=tr.toFixed(1); $("stFee").textContent=money(tf);
+  const showNav=state.mode==="week";
+  $("prevWk").style.visibility=showNav?"visible":"hidden"; $("nextWk").style.visibility=showNav?"visible":"hidden";
+  $("savePdf").disabled=$("printBtn").disabled=!list.length;
+
+  if(!list.length){
+    const msg = state.sales.size ? "No sales in this range. Use the arrows to change weeks, or upload a log." : "No sales yet. Upload a sales log to get started.";
+    $("cards").innerHTML=`<div class="empty">${msg}</div>`;
+    $("tableWrap").innerHTML=`<div class="empty" style="border:0">${msg}</div>`;
+    return;
+  }
+  // cards
+  let html="", day=null;
+  const byDay={}; for(const s of list){ (byDay[s.saleDate] ||= []).push(s); }
+  for(const d of Object.keys(byDay)){
+    const items=byDay[d]; const dc=items.reduce((t,s)=>t+(commission(s.rvol)||0),0);
+    html+=`<div class="day"><h3><span>${esc(parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}))}</span><span class="num">${money(dc)}</span></h3>`;
+    for(const s of items){
+      const c=commission(s.rvol);
+      html+=`<button class="sale" data-id="${esc(s.id)}">
+        <span class="co">${esc(s.company)}</span>
+        <span class="comm num">${c==null?'<span class="flag">$0</span>':money(c)}</span>
+        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
+      </button>`;
+    }
+    html+="</div>";
+  }
+  $("cards").innerHTML=html;
+  // table
+  let t=`<table><thead><tr><th>Sale date</th><th class="r">RVOL</th><th>Par</th><th>Sales rep</th><th>Run date</th><th>Company</th><th class="r">Fee</th><th>Taken by</th><th class="c">44</th><th>Appt date</th><th class="r">Commission</th></tr></thead><tbody>`;
+  for(const s of list){
+    const c=commission(s.rvol); const nd=s.saleDate!==day; day=s.saleDate;
+    t+=`<tr data-id="${esc(s.id)}" class="${nd?"newday":""}"><td>${nd?short(s.saleDate):""}</td><td class="r num">${esc(s.rvol)}</td><td>${esc(s.par)}</td><td>${esc(s.rep)}</td><td class="num">${esc(s.runDate)}</td><td>${esc(s.company)}${s.note?' <span class="flag" title="'+esc(s.note)+'">*</span>':""}</td><td class="r num">${Number(s.fee||0).toLocaleString()}</td><td>${esc(s.takenBy)}</td><td class="c">${s.c44?'<span class="tick">✓</span>':""}</td><td class="num">${esc(s.apptDate)}</td><td class="r num"><b>${c==null?'<span class="flag">$0</span>':money(c)}</b></td></tr>`;
+  }
+  t+=`</tbody><tfoot><tr><td>Total</td><td class="r num">${tr.toFixed(1)}</td><td></td><td>${list.length} sales</td><td></td><td></td><td class="r num">${tf.toLocaleString()}</td><td></td><td class="c">${list.filter(s=>s.c44).length}</td><td></td><td class="r num">${money(tc)}</td></tr></tfoot></table>`;
+  $("tableWrap").innerHTML=t;
+}
+
+/* ---------- settings form ---------- */
+function fillSettings(){
+  const s=state.settings;
+  $("setTerms").value=(s.bcTerms||[]).join(", ");
+  $("setLabel").value=s.bcLabel||"";
+  $("setWeek").value=String(s.weekStart??1);
+  const tiers=[...(s.tiers||[])].sort((a,b)=>b.min-a.min);
+  while(tiers.length<3) tiers.push({min:"",amt:""});
+  $("tierBox").innerHTML=tiers.map((t,i)=>`<input aria-label="Tier ${i+1} minimum RVOL" class="tmin" inputmode="decimal" value="${esc(t.min)}" placeholder="RVOL"><input aria-label="Tier ${i+1} amount" class="tamt" inputmode="numeric" value="${esc(t.amt)}" placeholder="$">`).join("");
+  $("setKey").value=getApiKey();
+}
+$("saveSettings").addEventListener("click", async()=>{
+  const mins=[...document.querySelectorAll(".tmin")].map(i=>parseFloat(i.value));
+  const amts=[...document.querySelectorAll(".tamt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
+  const tiers=mins.map((m,i)=>({min:m,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
+  const terms=$("setTerms").value.split(",").map(x=>x.trim()).filter(Boolean);
+  if(!terms.length){ toast("Add at least one BC name or number."); return; }
+  state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value) };
+  await putSettings(); toast(storageOk?"Settings saved.":"Couldn't save settings on this device.");
+  render();
+});
+$("saveKey").addEventListener("click",()=>{
+  const k=$("setKey").value.trim();
+  if(!k){ toast("Paste your API key first."); return; }
+  toast(setApiKey(k)?"Key saved on this device.":"Couldn't save the key on this device.");
+});
+$("clearKey").addEventListener("click",()=>{ setApiKey(""); $("setKey").value=""; toast("Key removed."); });
+
+/* ---------- backup / restore ---------- */
+$("backupBtn").addEventListener("click", async()=>{
+  const data={app:"sales-tracker", version:1, exportedAt:new Date().toISOString(), settings:state.settings, sales:Object.fromEntries(state.sales)};
+  const name="sales-tracker-backup-"+todayISO()+".json";
+  const r=await deliverFile(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}), name);
+  if(r==="saved") toast("Backup saved ("+state.sales.size+" sales).");
+});
+$("restoreBtn").addEventListener("click",()=>$("restoreIn").click());
+$("restoreIn").addEventListener("change", async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  let o;
+  try{ o=JSON.parse(await f.text()); }catch(err){ toast("That file isn't a tracker backup."); return; }
+  const incoming=Array.isArray(o.sales)?o.sales:Object.values(o.sales||{});
+  if(!incoming.length && !o.settings){ toast("That file isn't a tracker backup."); return; }
+  let added=0, updated=0;
+  for(const s of incoming){
+    if(!s || !s.pn || !s.saleDate) continue;
+    const id=safeId(s.pn); const old=state.sales.get(id);
+    if(old && (old.updatedAt||"")>=(s.updatedAt||"")) continue;
+    state.sales.set(id, Object.assign({}, s, {id}));
+    old?updated++:added++;
+  }
+  if(o.settings && confirm("Also use the settings from this backup (BC name, tiers, week start)?")){
+    state.settings=Object.assign(structuredClone(DEFAULT_SETTINGS), o.settings); fillSettings();
+  }
+  saveLocal(); render();
+  toast("Restored: "+added+" added, "+updated+" updated.");
+});
+
+/* ---------- save a file (share sheet on phones, download elsewhere) ---------- */
+async function deliverFile(blob, name){
+  const file=new File([blob], name, {type:blob.type});
+  const touch=window.matchMedia && matchMedia("(pointer:coarse)").matches;
+  if(touch && navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:name}); return "saved"; }
+    catch(e){ if(e && e.name==="AbortError") return "declined"; }
+  }
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=name; document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+  return "saved";
+}
+
+/* ---------- range controls ---------- */
+function setMode(m){
+  state.mode=m;
+  for(const [id,v] of [["modeWeek","week"],["modeCustom","custom"],["modeAll","all"]]) $(id).setAttribute("aria-pressed", String(m===v));
+  $("customBox").classList.toggle("on", m==="custom");
+  if(m==="custom" && !state.from){ const [a,b]=weekBounds(state.weekAnchor); state.from=a; state.to=b; $("fromDate").value=a; $("toDate").value=b; }
+  render();
+}
+$("modeWeek").onclick=()=>setMode("week");
+$("modeCustom").onclick=()=>setMode("custom");
+$("modeAll").onclick=()=>setMode("all");
+$("prevWk").onclick=()=>{ state.weekAnchor=addDays(state.weekAnchor,-7); render(); };
+$("nextWk").onclick=()=>{ state.weekAnchor=addDays(state.weekAnchor,7); render(); };
+$("fromDate").onchange=e=>{ state.from=e.target.value||null; render(); };
+$("toDate").onchange=e=>{ state.to=e.target.value||null; render(); };
+
+/* ---------- edit dialog ---------- */
+const dlg=$("dlg");
+function openEdit(id){
+  const s=id?state.sales.get(id):{saleDate:todayISO(),pn:"",rvol:"",fee:"",par:"",rep:"",runDate:"",apptDate:"",company:"",takenBy:"",bc:state.settings.bcLabel,note:"",c44:true};
+  if(!s) return;
+  state.editingId=id||null;
+  $("dlgTitle").textContent=id?"Edit sale":"Add a sale";
+  $("dlgDelete").style.display=id?"":"none";
+  $("fSale").value=s.saleDate; $("fPn").value=s.pn; $("fRvol").value=s.rvol; $("fFee").value=s.fee;
+  $("fPar").value=s.par||""; $("fRep").value=s.rep||""; $("fRun").value=s.runDate||""; $("fAppt").value=s.apptDate||"";
+  $("fCo").value=s.company||""; $("fTaken").value=s.takenBy||""; $("fBc").value=s.bc||""; $("fNote").value=s.note||"";
+  $("f44").checked=!!s.c44;
+  dlg.showModal();
+}
+document.addEventListener("click",e=>{
+  const el=e.target.closest("[data-id]"); if(el && (el.closest("#cards")||el.closest("#tableWrap"))) openEdit(el.dataset.id);
+});
+$("addBtn").onclick=()=>openEdit(null);
+$("editForm").addEventListener("submit", async e=>{
+  const action=e.submitter?.value;
+  if(action==="cancel") return;
+  if(action==="delete"){
+    if(state.editingId){ await removeSale(state.editingId); toast("Sale deleted."); render(); }
+    return;
+  }
+  const rv=parseFloat($("fRvol").value);
+  const sale={
+    saleDate:$("fSale").value, pn:$("fPn").value.trim(), rvol:isNaN(rv)?$("fRvol").value.trim():rv.toFixed(1),
+    fee:Number(String($("fFee").value).replace(/[$,]/g,""))||0, par:$("fPar").value.trim(), rep:$("fRep").value.trim(),
+    runDate:mdy($("fRun").value), apptDate:mdy($("fAppt").value), company:$("fCo").value.trim(), takenBy:$("fTaken").value.trim(),
+    bc:$("fBc").value.trim(), note:$("fNote").value.trim(), c44:$("f44").checked, source:"edited by hand"
+  };
+  if(state.editingId && safeId(sale.pn)!==state.editingId) await removeSale(state.editingId);
+  await putSale(sale); toast(storageOk?"Sale saved.":"Couldn't save on this device.");
+  render();
+});
+
+/* ---------- PDF reading ---------- */
+let pdfReady=false;
+function pdfLib(){
+  const lib=window.pdfjsLib;
+  if(!lib) throw new Error("The PDF reader didn't load. Reload the app and try again.");
+  if(!pdfReady){ lib.GlobalWorkerOptions.workerSrc="vendor/pdf.worker.min.js"; pdfReady=true; }
+  return lib;
+}
+
+function groupRows(items){
+  const rows=[];
+  for(const it of items){
+    let r=rows.find(r=>Math.abs(r.y-it.y)<2.5);
+    if(!r){ r={y:it.y,h:0,items:[]}; rows.push(r); }
+    r.items.push(it); r.h=Math.max(r.h,it.h);
+  }
+  for(const r of rows){ r.items.sort((a,b)=>a.x-b.x); r.text=r.items.map(i=>i.s).join(" "); r.marked=r.items.map(i=>"["+Math.round(i.x)+"]"+i.s).join(" "); }
+  rows.sort((a,b)=>b.y-a.y);
+  return rows;
+}
+
+async function readPdf(file){
+  const lib=pdfLib();
+  const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const terms=state.settings.bcTerms.map(t=>t.toLowerCase()).filter(Boolean);
+  let saleDate=null, header=null; const found=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const items=tc.items.filter(i=>i.str && i.str.trim()).map(i=>({x:i.transform[4],y:i.transform[5],w:i.width,h:i.height||Math.abs(i.transform[3])||8,s:i.str.trim()}));
+    const rows=groupRows(items);
+    if(!saleDate){
+      for(const r of rows){ const m=r.text.match(/Sales\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m){ saleDate=mdyToISO(m[1]); break; } }
+    }
+    const hdr=rows.find(r=>/RVOL/i.test(r.text) && /Company/i.test(r.text));
+    if(!hdr) continue;
+    if(!header) header=hdr.marked;
+    const h44=hdr.items.find(i=>i.s==="44");
+    const matched=rows.filter(r=>r.y<hdr.y-1 && terms.some(t=>r.text.toLowerCase().includes(t)));
+    if(!matched.length) continue;
+    let ctx=null, vp=null;
+    if(h44){
+      vp=page.getViewport({scale:2});
+      const canvas=document.createElement("canvas"); canvas.width=Math.ceil(vp.width); canvas.height=Math.ceil(vp.height);
+      ctx=canvas.getContext("2d",{willReadFrequently:true}); ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+      await page.render({canvasContext:ctx, viewport:vp, canvas}).promise;
+    }
+    for(const r of matched){
+      let c44=null;
+      if(ctx){
+        const cx=h44.x+h44.w/2, cy=r.y+r.h*0.3;
+        const [px,py]=vp.convertToViewportPoint(cx,cy);
+        const half=5, img=ctx.getImageData(Math.round(px-half),Math.round(py-half),half*2+1,half*2+1).data;
+        let dark=0,tot=0; for(let k=0;k<img.length;k+=4){ tot++; if((img[k]*.299+img[k+1]*.587+img[k+2]*.114)<128) dark++; }
+        c44=dark/tot>0.1;
+      }
+      found.push({marked:r.marked, c44});
+    }
+  }
+  return {saleDate, header, rows:found};
+}
+
+function buildPrompt(header, rows){
+  return `You are reading rows from a printed sales report so they can be logged. Below is the report's header row and some data rows. Each text fragment is prefixed with its x position in points, like [342]Red Elk Construction. Some reports merge neighbouring columns into one fragment (for example "[281]10/06/26 Craftsman Plumbi" holds Run Date and Company, and "[385]1,300 Jacobson, Jor" holds Fee and Taken By), so split fragments by meaning, using the header's column order and x positions as a guide.
+
+Header:
+${header}
+
+Rows:
+${rows.map((r,i)=>"#"+i+": "+r.marked).join("\n")}
+
+For every row return an object with:
+- "i": the row number after #
+- "pn": the PN-Appt value (for example 218265849-1). A small row counter before it (like "39 ") is not part of it.
+- "rvol": RVOL as printed, one decimal (for example "1.0")
+- "par": the Par name, or "" when empty. Par sits between RVOL and Sales Rep; if two names appear in that span, the first is Par and the second is the Sales Rep.
+- "rep": the Sales Rep name as printed
+- "run_date": Run Date as MM/DD/YY
+- "company": Company as printed (it may be cut off; keep it as printed)
+- "fee": Fee as a number, without commas
+- "taken_by": the Taken By name, or "" when blank. Taken By, Confirmer and Sales Senex are name columns right after Fee, in that order. If two or three names appear there, the first is Taken By. If only one name appears, it is the Confirmer and Taken By is "".
+- "appt_date": Appt Date as MM/DD/YY
+- "bc": the BC value as printed (a name or a number)
+
+Copy names and companies exactly as printed.`;
+}
+
+const ROWS_SCHEMA = {
+  type:"object", additionalProperties:false, required:["rows"],
+  properties:{ rows:{ type:"array", items:{
+    type:"object", additionalProperties:false,
+    required:["i","pn","rvol","par","rep","run_date","company","fee","taken_by","appt_date","bc"],
+    properties:{
+      i:{type:"integer"}, pn:{type:"string"}, rvol:{type:"string"}, par:{type:"string"}, rep:{type:"string"},
+      run_date:{type:"string"}, company:{type:"string"}, fee:{type:"number"}, taken_by:{type:"string"},
+      appt_date:{type:"string"}, bc:{type:"string"}
+    }
+  }}}
+};
+
+class ReadError extends Error {}
+
+async function readRowsWithClaude(prompt){
+  const key=getApiKey();
+  if(!key) throw new ReadError("Add your Anthropic API key in Settings to read logs.");
+  if(!window.Anthropic) throw new ReadError("The log reader didn't load. Reload the app and try again.");
+  const A=window.Anthropic;
+  const client=new A({apiKey:key, dangerouslyAllowBrowser:true});
+  const base={
+    model:MODEL, max_tokens:16000,
+    output_config:{effort:"medium", format:{type:"json_schema", schema:ROWS_SCHEMA}},
+    messages:[{role:"user", content:prompt}]
+  };
+  let res;
+  try{
+    try{
+      // If a safety check declines the request, let the API retry it on a fallback model.
+      res=await client.beta.messages.create({...base, betas:["server-side-fallback-2026-07-01"], fallbacks:"default"});
+    }catch(e){
+      if(!(e instanceof A.BadRequestError)) throw e;
+      res=await client.messages.create(base);
+    }
+  }catch(e){
+    if(e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError) throw new ReadError("Your API key was rejected. Check it in Settings.");
+    if(e instanceof A.RateLimitError) throw new ReadError("Too many logs at once. Wait a minute, then upload this one again.");
+    if(e instanceof A.APIConnectionError) throw new ReadError("No connection. Reading logs needs the internet; try again when you're online.");
+    if(e instanceof A.APIError) throw new ReadError("Couldn't read this log ("+(e.status||"error")+": "+e.message+"). Try uploading it again.");
+    throw e;
+  }
+  if(res.stop_reason==="refusal") throw new ReadError("Claude declined to read this log. Add the sales by hand.");
+  if(res.stop_reason==="max_tokens") throw new ReadError("This log has too many of your sales to read at once. Split the PDF and upload the parts.");
+  const text=res.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+  try{ return JSON.parse(text); }
+  catch(e){ throw new ReadError("Claude's answer couldn't be understood. Try uploading the log again."); }
+}
+
+async function extract(file){
+  const parsed=await readPdf(file);
+  if(!parsed.header) return {file:file.name, error:"This doesn't look like a sales listing. No table header was found."};
+  if(!parsed.rows.length) return {file:file.name, added:0, updated:0, same:0, none:true, saleDate:parsed.saleDate};
+  let out;
+  try{ out=await readRowsWithClaude(buildPrompt(parsed.header, parsed.rows)); }
+  catch(e){ if(e instanceof ReadError) return {file:file.name, error:e.message}; throw e; }
+  const rows=Array.isArray(out?.rows)?out.rows:[];
+  const terms=state.settings.bcTerms.map(t=>t.toLowerCase());
+  const saleDate=parsed.saleDate||todayISO();
+  let added=0, updated=0, same=0; const skipped=[];
+  for(const r of rows){
+    const src=parsed.rows[r.i]; if(!src || !r.pn) continue;
+    if(r.bc && !terms.some(t=>String(r.bc).toLowerCase().includes(t))){ skipped.push(r.pn); continue; }
+    const rv=parseFloat(r.rvol);
+    const sale={
+      saleDate, pn:String(r.pn).trim(), rvol:isNaN(rv)?String(r.rvol||""):rv.toFixed(1),
+      fee:Number(String(r.fee??0).replace(/[$,]/g,""))||0, par:(r.par||"").trim(), rep:(r.rep||"").trim(),
+      runDate:mdy(r.run_date), apptDate:mdy(r.appt_date), company:(r.company||"").trim(), takenBy:(r.taken_by||"").trim(),
+      bc:state.settings.bcLabel, c44:src.c44===null?false:src.c44, note:src.c44===null?"Check 44":"", source:file.name
+    };
+    if(!parsed.saleDate) sale.note=(sale.note?sale.note+"; ":"")+"Sale date not found in log";
+    const id=safeId(sale.pn); const old=state.sales.get(id);
+    if(old){
+      if(old.saleDate>sale.saleDate){ same++; continue; }   // keep the newer report's version
+      if(old.saleDate<sale.saleDate) sale.note=[sale.note,"Also on "+short(old.saleDate)+" log"].filter(Boolean).join("; ");
+      const keys=["saleDate","rvol","fee","par","rep","runDate","apptDate","company","takenBy","c44"];
+      if(keys.every(k=>String(old[k])===String(sale[k]))){ same++; continue; }
+      await putSale(sale); updated++;
+    }else{ await putSale(sale); added++; }
+  }
+  return {file:file.name, added, updated, same, saleDate, skipped};
+}
+
+async function handleFiles(files){
+  files=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
+  if(!files.length){ toast("Choose PDF sales logs."); return; }
+  $("log").innerHTML=""; let latest=null;
+  for(const f of files){
+    const li=document.createElement("li"); li.innerHTML=`<span class="f">${esc(f.name)}</span>: reading…`; $("log").append(li);
+    let res;
+    try{ res=await extract(f); }catch(e){ res={file:f.name,error:(e&&e.message)||"Couldn't open this PDF."}; }
+    if(res.error){ li.className="err"; li.innerHTML=`<span class="f">${esc(f.name)}</span>: ${esc(res.error)}`; continue; }
+    const when=res.saleDate?" ("+short(res.saleDate)+" sales)":"";
+    if(res.none){ li.innerHTML=`<span class="f">${esc(f.name)}</span>${when}: none of your sales are on this log.`; continue; }
+    const parts=[]; if(res.added) parts.push(res.added+" added"); if(res.updated) parts.push(res.updated+" updated"); if(res.same) parts.push(res.same+" already saved");
+    li.innerHTML=`<span class="f">${esc(f.name)}</span>${when}: ${parts.join(", ")||"nothing new"}.`;
+    if(res.saleDate && (!latest || res.saleDate>latest)) latest=res.saleDate;
+    if(latest && state.mode==="week") state.weekAnchor=latest;
+    render();
+  }
+  $("fileIn").value="";
+}
+$("fileIn").addEventListener("change",e=>handleFiles(e.target.files));
+const drop=$("drop");
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>handleFiles(e.dataTransfer.files));
+
+/* ---------- report (PDF + print) ---------- */
+function reportData(){
+  const list=salesInRange(); const [a,b]=currentRange();
+  const dates=list.map(s=>s.saleDate);
+  const from=state.mode==="all"?dates[0]:a, to=state.mode==="all"?dates[dates.length-1]:b;
+  return {list, from, to};
+}
+function rowCells(s, showDate){
+  const c=commission(s.rvol);
+  return [showDate?short(s.saleDate):"", s.rvol, s.par||"", s.rep||"", s.runDate||"", (s.company||"")+(s.note?" *":""), Number(s.fee||0).toLocaleString("en-US"), s.takenBy||"", s.c44?"X":"", s.apptDate||"", s.bc||"", c==null?"$0 **":money(c)];
+}
+const HEAD=["Sale Date","RVOL","Par","Sales Rep","Run Date","Company","Fee","Taken By","44","Appt Date","BC","Commission"];
+
+async function makePdf(){
+  const {PDFDocument, StandardFonts, rgb}=window.PDFLib;
+  const {list, from, to}=reportData();
+  const doc=await PDFDocument.create();
+  const font=await doc.embedFont(StandardFonts.Helvetica), bold=await doc.embedFont(StandardFonts.HelveticaBold);
+  const W=792,H=612,M=29;
+  const widths=[54,32,26,80,52,118,40,66,20,54,108,62]; const total=widths.reduce((a,b)=>a+b,0);
+  const scale=(W-2*M)/total; const cw=widths.map(w=>w*scale);
+  const align=["l","c","l","l","l","l","r","l","c","l","l","r"];
+  const navy=rgb(.122,.231,.4), grid=rgb(.72,.76,.82), band=rgb(.933,.949,.973), totalBg=rgb(.85,.88,.93);
+  const fs=8, rh=17;
+  let page, y;
+  const fit=(t,f,w)=>{ t=String(t); if(f.widthOfTextAtSize(t,fs)<=w) return t; while(t.length>1 && f.widthOfTextAtSize(t+"…",fs)>w) t=t.slice(0,-1); return t+"…"; };
+  function drawRow(cells,{f=font,bg=null,color=rgb(0,0,0),topRule=false}={}){
+    if(bg) page.drawRectangle({x:M,y:y-rh,width:W-2*M,height:rh,color:bg});
+    let x=M;
+    cells.forEach((c,i)=>{
+      const txt=fit(c,f,cw[i]-6); const tw=f.widthOfTextAtSize(txt,fs);
+      const tx=align[i]==="r"?x+cw[i]-3-tw:align[i]==="c"?x+(cw[i]-tw)/2:x+3;
+      page.drawText(txt,{x:tx,y:y-rh+5.5,size:fs,font:f,color});
+      page.drawRectangle({x,y:y-rh,width:cw[i],height:rh,borderColor:grid,borderWidth:.4});
+      x+=cw[i];
+    });
+    if(topRule) page.drawLine({start:{x:M,y},end:{x:W-M,y},thickness:1,color:navy});
+    y-=rh;
+  }
+  function newPage(first){
+    page=doc.addPage([W,H]); y=H-M;
+    if(first){
+      const title="My Sales – BC "+state.settings.bcLabel; const tw=bold.widthOfTextAtSize(title,17);
+      page.drawText(title,{x:(W-tw)/2,y:y-14,size:17,font:bold,color:navy});
+      const sub="Sales dates "+short(from)+" – "+short(to); const sw=font.widthOfTextAtSize(sub,9.5);
+      page.drawText(sub,{x:(W-sw)/2,y:y-30,size:9.5,font,color:rgb(.45,.45,.45)});
+      y-=44;
+    }
+    drawRow(HEAD,{f:bold,bg:navy,color:rgb(1,1,1)});
+  }
+  newPage(true);
+  let prev=null, tc=0,tr=0,tf=0, n=0, flagged=false, noted=[];
+  list.forEach(s=>{
+    if(y-rh<M+40) newPage(false);
+    const nd=s.saleDate!==prev; prev=s.saleDate;
+    const c=commission(s.rvol); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0;
+    if(s.note) noted.push(s);
+    drawRow(rowCells(s,nd),{bg:(n++%2)?band:null,topRule:nd&&n>1});
+  });
+  if(y-rh<M+40) newPage(false);
+  drawRow(["TOTAL",tr.toFixed(1),"",list.length+" sales","","",tf.toLocaleString("en-US"),"",String(list.filter(s=>s.c44).length),"","",money(tc)],{f:bold,bg:totalBg});
+  const notes=["44 column: X = checked.", "Commission: "+[...state.settings.tiers].sort((a,b)=>a.min-b.min).map(t=>"RVOL "+t.min+"+ = "+money(t.amt)).join("  |  ")+"."];
+  if(flagged) notes.push("** RVOL below the lowest tier earns $0.");
+  noted.forEach(s=>notes.push("* "+s.company+" ("+s.pn+"): "+s.note+"."));
+  y-=12;
+  for(const t of notes){ if(y<M){ page=doc.addPage([W,H]); y=H-M; } page.drawText(fit(t,font,W-2*M),{x:M,y,size:7.5,font,color:rgb(.27,.27,.27)}); y-=10; }
+  return {bytes:await doc.save(), name:"My_Sales_"+short(from).replace(/\//g,"-")+"_to_"+short(to).replace(/\//g,"-")+".pdf"};
+}
+
+$("savePdf").addEventListener("click", async()=>{
+  if(!window.PDFLib){ toast("The PDF maker didn't load. Use Print instead."); return; }
+  $("savePdf").disabled=true;
+  try{
+    const {bytes,name}=await makePdf();
+    const r=await deliverFile(new Blob([bytes],{type:"application/pdf"}), name);
+    if(r==="saved") toast("PDF ready.");
+  }catch(e){ toast("Couldn't build the PDF. Use Print instead."); }
+  $("savePdf").disabled=false;
+});
+
+function doPrint(){
+  const {list,from,to}=reportData();
+  let prev=null, tc=0,tr=0,tf=0, flagged=false, noted=[];
+  const body=list.map(s=>{ const nd=s.saleDate!==prev; prev=s.saleDate; const c=commission(s.rvol); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; if(s.note) noted.push(s);
+    return "<tr>"+rowCells(s,nd).map(x=>"<td>"+esc(x)+"</td>").join("")+"</tr>"; }).join("");
+  const foot=`<tr><td><b>TOTAL</b></td><td><b>${tr.toFixed(1)}</b></td><td></td><td><b>${list.length} sales</b></td><td></td><td></td><td><b>${tf.toLocaleString()}</b></td><td></td><td><b>${list.filter(s=>s.c44).length}</b></td><td></td><td></td><td><b>${money(tc)}</b></td></tr>`;
+  $("printArea").innerHTML=`<h1>My Sales – BC ${esc(state.settings.bcLabel)}</h1><p>Sales dates ${short(from)} – ${short(to)}</p>
+    <table><thead><tr>${HEAD.map(h=>"<th>"+h+"</th>").join("")}</tr></thead><tbody>${body}${foot}</tbody></table>
+    <div class="foot">44 column: X = checked.${flagged?"<br>** RVOL below the lowest tier earns $0.":""}${noted.map(s=>"<br>* "+esc(s.company)+" ("+esc(s.pn)+"): "+esc(s.note)+".").join("")}</div>`;
+  window.print();
+}
+$("printBtn").addEventListener("click", doPrint);
+
+/* ---------- install / offline ---------- */
+let installEvt=null;
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; $("installBanner").hidden=false; });
+$("installBtn").addEventListener("click", async()=>{
+  if(!installEvt) return; installEvt.prompt();
+  try{ await installEvt.userChoice; }catch(e){}
+  installEvt=null; $("installBanner").hidden=true;
+});
+window.addEventListener("appinstalled",()=>{ $("installBanner").hidden=true; });
+const standalone=(window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+if(/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone) $("iosHint").hidden=false;
+if("serviceWorker" in navigator && location.protocol!=="file:"){
+  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+
+/* ---------- start ---------- */
+loadLocal(); fillSettings(); showStoreNote(); render();
+})();
+</script>
+</body>
+</html>
