@@ -1261,7 +1261,10 @@ window.addEventListener("appinstalled",()=>{ $("installBanner").hidden=true; });
 const standalone=(window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
 if(/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone) $("iosHint").hidden=false;
 if("serviceWorker" in navigator && location.protocol!=="file:"){
-  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{}); });
+  // When a new version of the app takes over, reload once so it shows right away.
+  const hadController=!!navigator.serviceWorker.controller; let reloaded=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(hadController && !reloaded && !lock){ reloaded=true; location.reload(); } });
 }
 try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
 

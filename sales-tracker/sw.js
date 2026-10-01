@@ -1,5 +1,5 @@
-// Offline support: serve the app from cache, refresh it in the background.
-const CACHE = "sales-tracker-v7";
+// Offline support: the page loads fresh when online; other files come from cache and refresh in the background.
+const CACHE = "sales-tracker-v8";
 const APP = [
   "./", "index.html", "manifest.webmanifest",
   "vendor/pdf.min.js", "vendor/pdf.worker.min.js", "vendor/pdf-lib.min.js", "vendor/anthropic.min.js",
@@ -27,6 +27,16 @@ self.addEventListener("fetch", e => {
   if (!sameOrigin && !FONT_HOSTS.includes(url.hostname)) return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
+    // The page itself: newest version when online, saved copy when offline.
+    if (req.mode === "navigate") {
+      try {
+        const res = await fetch(req, { cache: "no-cache" });
+        if (res.ok) cache.put("index.html", res.clone());
+        return res;
+      } catch (err) {
+        return (await cache.match("index.html")) || Response.error();
+      }
+    }
     const cached = await cache.match(req, { ignoreSearch: sameOrigin });
     const fresh = fetch(req).then(res => {
       if (res.ok || res.type === "opaque") cache.put(req, res.clone());
