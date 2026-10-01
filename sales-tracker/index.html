@@ -354,7 +354,7 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     </div>
     <div class="tiers">
       <div class="field"><label for="setRegPay">Regular commission check: any one payday (every 2 weeks after)</label><input type="date" id="setRegPay"></div>
-      <div class="field"><label for="setRegStart">First sale date that check pays for</label><input type="date" id="setRegStart"></div>
+      <div class="field"><label for="setRegEnd">Last sale date that check pays for</label><input type="date" id="setRegEnd"></div>
     </div>
     <span class="note" id="regHint">Regular commission is paid every 2 weeks and covers 2 weeks of sales.</span>
     <div class="dlgactions">
@@ -456,13 +456,17 @@ const DEFAULT_SETTINGS = {
     bigRvol: 5, bigSaleAmt: 50,
     confirmAmt: 10, bigConfirmAmt: 25
   },
-  // Mentoring paid every Friday for the week before; regular commission every other Friday (first one Oct 9, 2026).
-  pay: { mentorDay: 5, regPayday: "2026-10-09", regStart: "2026-09-21" }
+  // Mentoring paid every Friday for the week before. Regular commission every other Friday:
+  // the Oct 9, 2026 check pays sales through Fri Oct 2 (the 2 weeks ending that day).
+  pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" }
 };
 function mergeSettings(o){
   const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
   const pay=Object.assign({}, d.pay, o.pay||{});
-  if(!pay.regPayday || !pay.regStart){ pay.regPayday=d.pay.regPayday; pay.regStart=d.pay.regStart; }
+  // Older versions stored the first sale day of a check; the Sep 21 default meant "through Oct 2".
+  if(!pay.regEnd && pay.regStart) pay.regEnd = pay.regStart==="2026-09-21" ? "2026-10-02" : addDays(pay.regStart,13);
+  delete pay.regStart;
+  if(!pay.regPayday || !pay.regEnd){ pay.regPayday=d.pay.regPayday; pay.regEnd=d.pay.regEnd; }
   return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay});
 }
 const MODEL = "claude-opus-5-5";
@@ -540,9 +544,9 @@ function dayDiff(a,b){ return Math.round((parseISO(b)-parseISO(a))/864e5); }
 // Mentoring for a week is paid on the first mentoring payday after the week ends.
 function mentorPayday(ws){ let d=addDays(ws,7); while(parseISO(d).getDay()!==Number(state.settings.pay.mentorDay)) d=addDays(d,1); return d; }
 function regPeriodFor(day){
-  const p=state.settings.pay; if(!p.regPayday || !p.regStart) return null;
+  const p=state.settings.pay; if(!p.regPayday || !p.regEnd) return null;
   const k=dayDiff(p.regPayday,day); if(k%14!==0) return null;
-  const a=addDays(p.regStart,k); return [a, addDays(a,13)];
+  const end=addDays(p.regEnd,k); return [addDays(end,-13), end];
 }
 function paycheckOn(day){
   let mentor=null, reg=null;
@@ -756,19 +760,19 @@ function fillSettings(){
   $("apptTierBox").innerHTML=pairs(m.apptTiers,"ap","Appointments");
   $("countTierBox").innerHTML=pairs(m.countTiers,"ct","Sales");
   $("setBigRvol").value=m.bigRvol; $("setBigAmt").value=m.bigSaleAmt; $("setConfAmt").value=m.confirmAmt; $("setBigConfAmt").value=m.bigConfirmAmt;
-  $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegStart").value=py.regStart||"";
+  $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegEnd").value=py.regEnd||"";
   regHint();
 }
 function regHint(){
-  const a=$("setRegStart").value;
-  $("regHint").textContent=a ? "Each regular check pays 2 weeks of sales, like "+nice(a)+" – "+nice(addDays(a,13))+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
+  const e=$("setRegEnd").value;
+  $("regHint").textContent=e ? "Each regular check pays the 2 weeks of sales ending that day, like "+nice(addDays(e,-13))+" – "+nice(e)+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
 }
 $("setRegPay").addEventListener("change",()=>{
   const d=$("setRegPay").value;
-  if(d && !$("setRegStart").value){ const w=weekBounds(d)[0]; $("setRegStart").value=addDays(w,-14); }
+  if(d && !$("setRegEnd").value) $("setRegEnd").value=addDays(d,-7);
   regHint();
 });
-$("setRegStart").addEventListener("change",regHint);
+$("setRegEnd").addEventListener("change",regHint);
 function readTiers(cls){
   const mins=[...document.querySelectorAll("."+cls+"min")].map(i=>parseFloat(i.value));
   const amts=[...document.querySelectorAll("."+cls+"amt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
@@ -781,13 +785,13 @@ $("saveSettings").addEventListener("click", async()=>{
   const tiers=mins.map((m,i)=>({min:m,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
   const terms=$("setTerms").value.split(",").map(x=>x.trim()).filter(Boolean);
   if(!terms.length){ toast("Add at least one BC name or number."); return; }
-  const regPayday=$("setRegPay").value, regStart=$("setRegStart").value;
-  if(!!regPayday !== !!regStart){ toast("Fill in both regular payday dates, or leave both empty."); return; }
+  const regPayday=$("setRegPay").value, regEnd=$("setRegEnd").value;
+  if(!!regPayday !== !!regEnd){ toast("Fill in both regular payday dates, or leave both empty."); return; }
   const dm=DEFAULT_SETTINGS.mentor;
   state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value),
     mentor:{ apptTiers:readTiers("ap"), countTiers:readTiers("ct"), bigRvol:numIn("setBigRvol",dm.bigRvol), bigSaleAmt:numIn("setBigAmt",0),
       confirmAmt:numIn("setConfAmt",0), bigConfirmAmt:numIn("setBigConfAmt",0) },
-    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regStart } };
+    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regEnd } };
   mentorWs=null;
   await putSettings(); toast(storageOk?"Settings saved.":"Couldn't save settings on this device.");
   render();

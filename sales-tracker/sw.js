@@ -1,5 +1,5 @@
 // Offline support: serve the app from cache, refresh it in the background.
-const CACHE = "sales-tracker-v6";
+const CACHE = "sales-tracker-v7";
 const APP = [
   "./", "index.html", "manifest.webmanifest",
   "vendor/pdf.min.js", "vendor/pdf.worker.min.js", "vendor/pdf-lib.min.js", "vendor/anthropic.min.js",
