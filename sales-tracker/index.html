@@ -337,6 +337,10 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       <div class="tiers" id="tierBox"></div>
       <span class="note">Sales below the lowest tier earn $0 and are flagged.</span>
     </div>
+    <div class="tiers">
+      <div class="field"><label for="setBoostAfter">After this many sales in a week…</label><input id="setBoostAfter" inputmode="numeric"></div>
+      <div class="field"><label for="setBoostAmt">…each 1 mill sale pays ($)</label><input id="setBoostAmt" inputmode="decimal"></div>
+    </div>
     <div class="field">
       <label for="setWeek">Week starts on</label>
       <select id="setWeek">
@@ -485,6 +489,8 @@ const DEFAULT_SETTINGS = {
   bcLabel: "",
   tiers: [{min:5, amt:546}, {min:2, amt:318}, {min:1, amt:67}],
   weekStart: 1,
+  // In a week, from the 6th sale on, a sale at the lowest (1 mill) level pays this instead of $67.
+  boost: { after: 5, amt: 112 },
   mentor: {
     apptTiers: [{min:50, amt:50}, {min:60, amt:75}],
     countTiers: [{min:5, amt:50}, {min:10, amt:100}],
@@ -554,6 +560,29 @@ function currentRange(){
 
 /* ---------- money ---------- */
 const money = n => "$"+Math.round(n).toLocaleString("en-US");
+// Sales that get the bigger 1 mill amount: in each week, sales after the first `after`
+// (by sale date) that land in the lowest commission tier.
+let boostCache=null;
+function boostedSales(){
+  if(boostCache) return boostCache;
+  const set=new Set(), b=state.settings.boost||{}, after=Number(b.after);
+  const low=[...state.settings.tiers].filter(t=>!isNaN(t.min)).sort((a,b)=>a.min-b.min)[0];
+  if(low && Number(b.amt)>0 && !isNaN(after)){
+    const weeks=new Map();
+    for(const s of state.sales.values()){ if(!s.saleDate) continue; const k=weekBounds(s.saleDate)[0]; (weeks.get(k)||weeks.set(k,[]).get(k)).push(s); }
+    for(const list of weeks.values()){
+      list.sort((x,y)=>x.saleDate.localeCompare(y.saleDate) || String(x.pn).localeCompare(String(y.pn)));
+      list.forEach((s,i)=>{ if(i>=after && commission(s.rvol)===low.amt) set.add(s.id||safeId(s.pn)); });
+    }
+  }
+  return boostCache=set;
+}
+function saleComm(s){
+  const c=commission(s.rvol);
+  return c!=null && boostedSales().has(s.id||safeId(s.pn)) ? Number(state.settings.boost.amt) : c;
+}
+function ordinal(n){ const v=n%100; return n+(["th","st","nd","rd"][(v-20)%10]||["th","st","nd","rd"][v]||"th"); }
+const isBoosted = s => boostedSales().has(s.id||safeId(s.pn));
 function commission(rvol){
   const v=parseFloat(rvol); if(isNaN(v)) return null;
   const tiers=[...state.settings.tiers].filter(t=>!isNaN(t.min)).sort((a,b)=>b.min-a.min);
@@ -620,7 +649,7 @@ function paycheckOn(day){
   let mentor=null, reg=null;
   if(parseISO(day).getDay()===Number(state.settings.pay.mentorDay)) mentor=mentorWeek(addDays(weekBounds(day)[0],-7));
   const per=regPeriodFor(day);
-  if(per){ const list=salesBetween(per[0],per[1]).sort((a,b)=>a.saleDate.localeCompare(b.saleDate)); reg={from:per[0], to:per[1], n:list.length, list, amt:list.reduce((t,s)=>t+(commission(s.rvol)||0),0)}; }
+  if(per){ const list=salesBetween(per[0],per[1]).sort((a,b)=>a.saleDate.localeCompare(b.saleDate)); reg={from:per[0], to:per[1], n:list.length, list, amt:list.reduce((t,s)=>t+(saleComm(s)||0),0)}; }
   if(!mentor && !reg) return null;
   return {date:day, mentor, reg, total:(mentor?mentor.total:0)+(reg?reg.amt:0)};
 }
@@ -652,6 +681,7 @@ async function decryptObj(key,e){ return JSON.parse(dec.decode(await crypto.subt
 function readRaw(){ try{ const raw=localStorage.getItem(LS_KEY); return raw?JSON.parse(raw):null; }catch(e){ storageOk=false; return null; } }
 function applyData(o){
   if(!o) return;
+  boostCache=null;
   if(o.settings) state.settings=mergeSettings(o.settings);
   state.sales=new Map(Object.entries(o.sales||{}));
   state.mentoring=o.mentoring||{};
@@ -659,6 +689,7 @@ function applyData(o){
 }
 function dataToSave(){ return {settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring}; }
 function saveLocal(){
+  boostCache=null;
   if(lock){
     const snap=Object.assign(dataToSave(),{apiKey:state.apiKey||""}), l=lock;
     saveChain=saveChain.then(async()=>{ localStorage.setItem(LS_KEY, JSON.stringify({enc:await encryptObj(l.key,l.salt,snap)})); storageOk=true; })
@@ -703,7 +734,7 @@ function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&l
 
 function renderWeeks(){
   const byWeek=new Map();
-  for(const s of state.sales.values()){ if(!s.saleDate) continue; const [a]=weekBounds(s.saleDate); const w=byWeek.get(a)||{n:0,c:0}; w.n++; w.c+=commission(s.rvol)||0; byWeek.set(a,w); }
+  for(const s of state.sales.values()){ if(!s.saleDate) continue; const [a]=weekBounds(s.saleDate); const w=byWeek.get(a)||{n:0,c:0}; w.n++; w.c+=saleComm(s)||0; byWeek.set(a,w); }
   const keys=[...byWeek.keys()].sort().reverse();
   if(!keys.length){ $("weeks").innerHTML=""; return; }
   const cur=state.mode==="week"?weekBounds(state.weekAnchor)[0]:null;
@@ -716,7 +747,7 @@ function render(){
   renderWeeks(); renderMentor(); renderPay();
   const list=salesInRange();
   let tc=0,tr=0,tf=0, flagged=0;
-  for(const s of list){ const c=commission(s.rvol); if(c==null) flagged++; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; }
+  for(const s of list){ const c=saleComm(s); if(c==null) flagged++; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; }
   $("rangeLabel").textContent=rangeText();
   $("bigComm").innerHTML=money(tc)+"<small>commission</small>";
   $("stSales").textContent=list.length; $("stRvol").textContent=tr.toFixed(1); $("stFee").textContent=money(tf);
@@ -734,15 +765,15 @@ function render(){
   let html="", day=null;
   const byDay={}; for(const s of list){ (byDay[s.saleDate] ||= []).push(s); }
   for(const d of Object.keys(byDay)){
-    const items=byDay[d]; const dc=items.reduce((t,s)=>t+(commission(s.rvol)||0),0);
+    const items=byDay[d]; const dc=items.reduce((t,s)=>t+(saleComm(s)||0),0);
     html+=`<div class="day"><h3><span>${esc(parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}))}</span><span class="num">${money(dc)}</span></h3>`;
     for(const s of items){
-      const c=commission(s.rvol);
+      const c=saleComm(s);
       const bn=saleBonus(s);
       html+=`<div class="sale"><button class="salemain" data-id="${esc(s.id)}">
         <span class="co">${esc(s.company)}</span>
         <span class="comm num">${c==null?'<span class="flag">$0</span>':money(c)}</span>
-        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${bn?`<span class="bonus">Mentoring +${money(bn)}</span>`:""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
+        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${isBoosted(s)?`<span class="bonus">${ordinal(Number(state.settings.boost.after)+1)}+ sale this week: ${money(c)}</span>`:""}${bn?`<span class="bonus">Mentoring +${money(bn)}</span>`:""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
       </button><button class="conf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}">${s.confirmed?"✓ Confirmed":"Mark as confirmed"}</button></div>`;
     }
     html+="</div>";
@@ -751,7 +782,7 @@ function render(){
   // table
   let t=`<table><thead><tr><th>Sale date</th><th class="r">RVOL</th><th>Par</th><th>Sales rep</th><th>Run date</th><th>Company</th><th class="r">Fee</th><th>Taken by</th><th class="c">44</th><th>Appt date</th><th class="c">Conf</th><th class="r">Commission</th></tr></thead><tbody>`;
   for(const s of list){
-    const c=commission(s.rvol); const nd=s.saleDate!==day; day=s.saleDate;
+    const c=saleComm(s); const nd=s.saleDate!==day; day=s.saleDate;
     t+=`<tr data-id="${esc(s.id)}" class="${nd?"newday":""}"><td>${nd?short(s.saleDate):""}</td><td class="r num">${esc(s.rvol)}</td><td>${esc(s.par)}</td><td>${esc(s.rep)}</td><td class="num">${esc(s.runDate)}</td><td>${esc(s.company)}${s.note?' <span class="flag" title="'+esc(s.note)+'">*</span>':""}</td><td class="r num">${Number(s.fee||0).toLocaleString()}</td><td>${esc(s.takenBy)}</td><td class="c">${s.c44?'<span class="tick">✓</span>':""}</td><td class="num">${esc(s.apptDate)}</td><td class="c"><button class="tconf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}" aria-label="${s.confirmed?"Confirmed. Tap to unmark":"Mark as confirmed"}">${s.confirmed?"✓":""}</button></td><td class="r num"><b>${c==null?'<span class="flag">$0</span>':money(c)}</b></td></tr>`;
   }
   t+=`</tbody><tfoot><tr><td>Total</td><td class="r num">${tr.toFixed(1)}</td><td></td><td>${list.length} sales</td><td></td><td></td><td class="r num">${tf.toLocaleString()}</td><td></td><td class="c">${list.filter(s=>s.c44).length}</td><td></td><td class="c">${list.filter(s=>s.confirmed).length}</td><td class="r num">${money(tc)}</td></tr></tfoot></table>`;
@@ -830,7 +861,7 @@ function renderPay(){
     }
     if(c.reg){
       h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}${c.reg.n?"":" · no sales saved for these dates yet"}</small>`
-        + (c.reg.list.length?`<ul class="salelist">${c.reg.list.map(s=>`<li><span>${esc(short(s.saleDate))} · ${esc(s.company||s.pn)} · RVOL ${esc(s.rvol)}</span><span>${money(commission(s.rvol)||0)}</span></li>`).join("")}</ul>`:"")
+        + (c.reg.list.length?`<ul class="salelist">${c.reg.list.map(s=>`<li><span>${esc(short(s.saleDate))} · ${esc(s.company||s.pn)} · RVOL ${esc(s.rvol)}</span><span>${money(saleComm(s)||0)}</span></li>`).join("")}</ul>`:"")
         + `</span><b>${money(c.reg.amt)}</b></li>`;
     }
     return h+taxBlock(c);
@@ -861,6 +892,7 @@ function fillSettings(){
   while(tiers.length<3) tiers.push({min:"",amt:""});
   $("tierBox").innerHTML=tiers.map((t,i)=>`<input aria-label="Tier ${i+1} minimum RVOL" class="tmin" inputmode="decimal" value="${esc(t.min)}" placeholder="RVOL"><input aria-label="Tier ${i+1} amount" class="tamt" inputmode="numeric" value="${esc(t.amt)}" placeholder="$">`).join("");
   $("setKey").value=getApiKey();
+  $("setBoostAfter").value=s.boost.after; $("setBoostAmt").value=s.boost.amt;
   const m=s.mentor, py=s.pay;
   const pairs=(tiers,cls,unit)=>{ const t=[...(tiers||[])].sort((a,b)=>a.min-b.min); while(t.length<2) t.push({min:"",amt:""});
     return t.map((x,i)=>`<input aria-label="${unit} tier ${i+1}" class="${cls}min" inputmode="numeric" value="${esc(x.min)}" placeholder="${unit}"><input aria-label="${unit} tier ${i+1} bonus" class="${cls}amt" inputmode="decimal" value="${esc(x.amt)}" placeholder="$">`).join(""); };
@@ -905,6 +937,7 @@ $("saveSettings").addEventListener("click", async()=>{
   if(!!regPayday !== !!regEnd){ toast("Fill in both regular payday dates, or leave both empty."); return; }
   const dm=DEFAULT_SETTINGS.mentor;
   state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value),
+    boost:{ after:Math.max(0,parseInt($("setBoostAfter").value,10)||0), amt:numIn("setBoostAmt",0) },
     mentor:{ apptTiers:readTiers("ap"), countTiers:readTiers("ct"), bigRvol:numIn("setBigRvol",dm.bigRvol), bigSaleAmt:numIn("setBigAmt",0),
       confirmAmt:numIn("setConfAmt",0), bigConfirmAmt:numIn("setBigConfAmt",0) },
     pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regEnd }, tax:readTax() };
@@ -1225,8 +1258,8 @@ function reportData(){
   return {list, from, to};
 }
 function rowCells(s, showDate){
-  const c=commission(s.rvol);
-  return [showDate?short(s.saleDate):"", s.rvol, s.par||"", s.rep||"", s.runDate||"", (s.company||"")+(s.note?" *":""), Number(s.fee||0).toLocaleString("en-US"), s.takenBy||"", s.c44?"X":"", s.apptDate||"", s.bc||"", c==null?"$0 **":money(c)];
+  const c=saleComm(s);
+  return [showDate?short(s.saleDate):"", s.rvol, s.par||"", s.rep||"", s.runDate||"", (s.company||"")+(s.note?" *":""), Number(s.fee||0).toLocaleString("en-US"), s.takenBy||"", s.c44?"X":"", s.apptDate||"", s.bc||"", c==null?"$0 **":money(c)+(isBoosted(s)?" †":"")];
 }
 const HEAD=["Sale Date","RVOL","Par","Sales Rep","Run Date","Company","Fee","Taken By","44","Appt Date","BC","Commission"];
 
@@ -1272,7 +1305,7 @@ async function makePdf(){
   list.forEach(s=>{
     if(y-rh<M+40) newPage(false);
     const nd=s.saleDate!==prev; prev=s.saleDate;
-    const c=commission(s.rvol); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0;
+    const c=saleComm(s); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0;
     if(s.note) noted.push(s);
     drawRow(rowCells(s,nd),{bg:(n++%2)?band:null,topRule:nd&&n>1});
   });
@@ -1280,6 +1313,7 @@ async function makePdf(){
   drawRow(["TOTAL",tr.toFixed(1),"",list.length+" sales","","",tf.toLocaleString("en-US"),"",String(list.filter(s=>s.c44).length),"","",money(tc)],{f:bold,bg:totalBg});
   const notes=["44 column: X = checked.", "Commission: "+[...state.settings.tiers].sort((a,b)=>a.min-b.min).map(t=>"RVOL "+t.min+"+ = "+money(t.amt)).join("  |  ")+"."];
   if(flagged) notes.push("** RVOL below the lowest tier earns $0.");
+  if(list.some(isBoosted)) notes.push("† "+ordinal(Number(state.settings.boost.after)+1)+" or later sale in its week: a 1 mill sale pays "+money(state.settings.boost.amt)+".");
   noted.forEach(s=>notes.push("* "+s.company+" ("+s.pn+"): "+s.note+"."));
   y-=12;
   for(const t of notes){ if(y<M){ page=doc.addPage([W,H]); y=H-M; } page.drawText(fit(t,font,W-2*M),{x:M,y,size:7.5,font,color:rgb(.27,.27,.27)}); y-=10; }
@@ -1300,12 +1334,12 @@ $("savePdf").addEventListener("click", async()=>{
 function doPrint(){
   const {list,from,to}=reportData();
   let prev=null, tc=0,tr=0,tf=0, flagged=false, noted=[];
-  const body=list.map(s=>{ const nd=s.saleDate!==prev; prev=s.saleDate; const c=commission(s.rvol); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; if(s.note) noted.push(s);
+  const body=list.map(s=>{ const nd=s.saleDate!==prev; prev=s.saleDate; const c=saleComm(s); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; if(s.note) noted.push(s);
     return "<tr>"+rowCells(s,nd).map(x=>"<td>"+esc(x)+"</td>").join("")+"</tr>"; }).join("");
   const foot=`<tr><td><b>TOTAL</b></td><td><b>${tr.toFixed(1)}</b></td><td></td><td><b>${list.length} sales</b></td><td></td><td></td><td><b>${tf.toLocaleString()}</b></td><td></td><td><b>${list.filter(s=>s.c44).length}</b></td><td></td><td></td><td><b>${money(tc)}</b></td></tr>`;
   $("printArea").innerHTML=`<h1>My Sales – BC ${esc(state.settings.bcLabel)}</h1><p>Sales dates ${short(from)} – ${short(to)}</p>
     <table><thead><tr>${HEAD.map(h=>"<th>"+h+"</th>").join("")}</tr></thead><tbody>${body}${foot}</tbody></table>
-    <div class="foot">44 column: X = checked.${flagged?"<br>** RVOL below the lowest tier earns $0.":""}${noted.map(s=>"<br>* "+esc(s.company)+" ("+esc(s.pn)+"): "+esc(s.note)+".").join("")}</div>`;
+    <div class="foot">44 column: X = checked.${flagged?"<br>** RVOL below the lowest tier earns $0.":""}${list.some(isBoosted)?"<br>† "+ordinal(Number(state.settings.boost.after)+1)+" or later sale in its week: a 1 mill sale pays "+money(state.settings.boost.amt)+".":""}${noted.map(s=>"<br>* "+esc(s.company)+" ("+esc(s.pn)+"): "+esc(s.note)+".").join("")}</div>`;
   window.print();
 }
 $("printBtn").addEventListener("click", doPrint);
