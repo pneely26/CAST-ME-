@@ -261,6 +261,7 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     <div id="payNext"></div>
     <details class="paylist"><summary>Other paydays</summary><div id="payList"></div></details>
     <p class="note" id="payNote"></p>
+    <button class="btn ghost" id="editPaydays" style="margin-top:10px">Change paydays</button>
   </section>
 
   <section class="weeks" id="weeks" aria-label="Your weeks"></section>
@@ -330,7 +331,7 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     </div>
     <span class="note">A confirmed 5 mill sale earns the 5 mill confirm amount instead of the regular confirm amount.</span>
 
-    <h3>Paydays</h3>
+    <h3 id="paydaysHead">Paydays</h3>
     <div class="field">
       <label for="setMentorDay">Mentoring bonus is paid every week on (for the week before)</label>
       <select id="setMentorDay">
@@ -339,8 +340,8 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       </select>
     </div>
     <div class="tiers">
-      <div class="field"><label for="setRegPay">Regular commission: any one payday</label><input type="date" id="setRegPay"></div>
-      <div class="field"><label for="setRegStart">That check paid sales starting</label><input type="date" id="setRegStart"></div>
+      <div class="field"><label for="setRegPay">Regular commission check: any one payday (every 2 weeks after)</label><input type="date" id="setRegPay"></div>
+      <div class="field"><label for="setRegStart">First sale date that check pays for</label><input type="date" id="setRegStart"></div>
     </div>
     <span class="note" id="regHint">Regular commission is paid every 2 weeks and covers 2 weeks of sales.</span>
     <div class="dlgactions">
@@ -417,11 +418,14 @@ const DEFAULT_SETTINGS = {
     bigRvol: 5, bigSaleAmt: 50,
     confirmAmt: 10, bigConfirmAmt: 25
   },
-  pay: { mentorDay: 5, regPayday: "", regStart: "" }
+  // Mentoring paid every Friday for the week before; regular commission every other Friday (first one Oct 9, 2026).
+  pay: { mentorDay: 5, regPayday: "2026-10-09", regStart: "2026-09-21" }
 };
 function mergeSettings(o){
   const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
-  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay:Object.assign(d.pay, o.pay||{})});
+  const pay=Object.assign({}, d.pay, o.pay||{});
+  if(!pay.regPayday || !pay.regStart){ pay.regPayday=d.pay.regPayday; pay.regStart=d.pay.regStart; }
+  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay});
 }
 const MODEL = "claude-opus-5-5";
 
@@ -652,6 +656,7 @@ function saveMentorInputs(){
 ["mAppts","mExtra","mNote"].forEach(id=>$(id).addEventListener("input",saveMentorInputs));
 
 /* ---------- paychecks ---------- */
+$("editPaydays").addEventListener("click",()=>{ $("settings").open=true; $("paydaysHead").scrollIntoView({behavior:"smooth",block:"start"}); });
 function renderPay(){
   const today=todayISO(), checks=[];
   for(let i=-42;i<=28;i++){ const c=paycheckOn(addDays(today,i)); if(c) checks.push(c); }
