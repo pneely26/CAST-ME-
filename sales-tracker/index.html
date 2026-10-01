@@ -180,6 +180,19 @@ details.settings h3{margin:22px 0 4px;font-size:.95rem}
 .swatch.custom{display:flex;align-items:center;justify-content:center;font-size:1.2rem;background:conic-gradient(#e53935,#fdd835,#43a047,#1e88e5,#8e24aa,#e53935);overflow:hidden}
 .swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
 
+/* Lock screen */
+body.locked .wrap{display:none}
+.lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--paper);z-index:50}
+.lock[hidden]{display:none}
+.lockcard{width:min(360px,100%);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px 20px;text-align:center}
+.lockcard img{width:64px;height:64px;border-radius:14px}
+.lockcard h1{font-size:1.2rem;margin:12px 0 2px}
+.lockcard p{margin:0;color:var(--muted);font-size:.9rem}
+.lockcard input{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:12px;font-size:1.1rem;margin:16px 0 6px;text-align:center}
+.lockcard .btn{width:100%;padding:12px}
+.lockerr{color:var(--warn);min-height:1.4em;font-size:.9rem;margin-bottom:6px}
+.linkbtn{appearance:none;background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:.85rem;margin-top:14px}
+
 /* Dialog */
 dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:0;width:min(560px,94vw);max-height:90vh}
 dialog::backdrop{background:rgba(10,16,30,.5)}
@@ -359,8 +372,21 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
       <button class="btn ghost" id="clearKey">Remove key</button>
     </div>
 
+    <h3>Password lock</h3>
+    <p class="note" id="lockStatus">Off. Anyone using this device can open the tracker.</p>
+    <div class="tiers">
+      <div class="field"><label for="lockPw" id="lockPwLabel">Choose a password</label><input type="password" id="lockPw" autocomplete="new-password"></div>
+      <div class="field"><label for="lockPw2">Type it again</label><input type="password" id="lockPw2" autocomplete="new-password"></div>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="lockSet">Turn on password</button>
+      <button class="btn ghost" id="lockNow" hidden>Lock now</button>
+      <button class="btn danger" id="lockOff" hidden>Turn off password</button>
+    </div>
+    <p class="note">The password protects this device only. Your sales and API key here are encrypted with it, and the app locks again when you reopen it or leave it for 5 minutes. Set it on each phone or computer you use. If you forget it, the data on that device can't be recovered, so keep a backup.</p>
+
     <h3>Backup and other devices</h3>
-    <p class="note">Your sales are saved in this browser only. To move them to another phone or computer, download a backup here and restore it there. Restoring adds to what's already saved.</p>
+    <p class="note">Your sales are saved in this browser only. To move them to another phone or computer, download a backup here and restore it there. Restoring adds to what's already saved. Backup files aren't password protected, so keep them private.</p>
     <div class="dlgactions" style="margin-bottom:14px">
       <button class="btn ghost" id="backupBtn">Download backup</button>
       <button class="btn ghost" id="restoreBtn">Restore from backup</button>
@@ -399,6 +425,18 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
 </dialog>
 
 <div id="printArea"></div>
+<div class="lock" id="lock" hidden>
+  <form class="lockcard" id="lockForm">
+    <img src="icons/icon-192.png" alt="">
+    <h1>Sales &amp; commission tracker</h1>
+    <p>Enter your password to open.</p>
+    <input type="text" name="username" value="Sales tracker" autocomplete="username" hidden>
+    <input type="password" id="lockIn" autocomplete="current-password" aria-label="Password" required>
+    <div class="lockerr" id="lockErr" role="alert"></div>
+    <button class="btn" id="lockBtn">Unlock</button>
+    <button type="button" class="linkbtn" id="lockForgot">Forgot password?</button>
+  </form>
+</div>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -523,17 +561,39 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"
 const LS_KEY="salesTracker.v1", KEY_KEY="salesTracker.apiKey";
 let storageOk=true;
 function safeId(pn){ return String(pn).trim().replace(/[^A-Za-z0-9_\-.~:@+]/g,"_").slice(0,180) || ("s"+Date.now()); }
-function loadLocal(){
-  try{
-    const raw=localStorage.getItem(LS_KEY); if(!raw) return;
-    const o=JSON.parse(raw);
-    if(o.settings) state.settings=mergeSettings(o.settings);
-    state.sales=new Map(Object.entries(o.sales||{}));
-    state.mentoring=o.mentoring||{};
-  }catch(e){ storageOk=false; }
+// With the password lock on, everything saved on the device is encrypted (AES-GCM, key from PBKDF2).
+let lock=null;                 // {key, salt} while unlocked with a password
+let saveChain=Promise.resolve();
+const enc=new TextEncoder(), dec=new TextDecoder();
+function toB64(buf){ const u=new Uint8Array(buf); let s=""; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); }
+function fromB64(s){ const b=atob(s), u=new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+async function deriveKey(pw,salt){
+  const base=await crypto.subtle.importKey("raw",enc.encode(pw),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
 }
+async function encryptObj(key,salt,obj){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(obj)));
+  return {salt:toB64(salt), iv:toB64(iv), ct:toB64(ct)};
+}
+async function decryptObj(key,e){ return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:fromB64(e.iv)},key,fromB64(e.ct)))); }
+function readRaw(){ try{ const raw=localStorage.getItem(LS_KEY); return raw?JSON.parse(raw):null; }catch(e){ storageOk=false; return null; } }
+function applyData(o){
+  if(!o) return;
+  if(o.settings) state.settings=mergeSettings(o.settings);
+  state.sales=new Map(Object.entries(o.sales||{}));
+  state.mentoring=o.mentoring||{};
+  if("apiKey" in o) state.apiKey=o.apiKey||"";
+}
+function dataToSave(){ return {settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring}; }
 function saveLocal(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring})); storageOk=true; }
+  if(lock){
+    const snap=Object.assign(dataToSave(),{apiKey:state.apiKey||""}), l=lock;
+    saveChain=saveChain.then(async()=>{ localStorage.setItem(LS_KEY, JSON.stringify({enc:await encryptObj(l.key,l.salt,snap)})); storageOk=true; })
+      .catch(()=>{ storageOk=false; }).then(showStoreNote);
+    return;
+  }
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(dataToSave())); storageOk=true; }
   catch(e){ storageOk=false; }
   showStoreNote();
 }
@@ -549,8 +609,8 @@ async function putSale(sale){
 async function removeSale(id){ state.sales.delete(id); saveLocal(); }
 async function putSettings(){ saveLocal(); }
 
-function getApiKey(){ try{ return localStorage.getItem(KEY_KEY)||""; }catch(e){ return ""; } }
-function setApiKey(k){ try{ if(k) localStorage.setItem(KEY_KEY,k); else localStorage.removeItem(KEY_KEY); return true; }catch(e){ return false; } }
+function getApiKey(){ if(lock) return state.apiKey||""; try{ return localStorage.getItem(KEY_KEY)||""; }catch(e){ return ""; } }
+function setApiKey(k){ if(lock){ state.apiKey=k||""; saveLocal(); return true; } try{ if(k) localStorage.setItem(KEY_KEY,k); else localStorage.removeItem(KEY_KEY); return true; }catch(e){ return false; } }
 
 /* ---------- rendering ---------- */
 function salesInRange(){
@@ -1201,9 +1261,71 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
 }
 try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
 
+/* ---------- password lock ---------- */
+function updateLockUI(){
+  $("lockStatus").textContent=lock?"On. This device asks for your password to open the tracker.":"Off. Anyone using this device can open the tracker.";
+  $("lockPwLabel").textContent=lock?"New password":"Choose a password";
+  $("lockSet").textContent=lock?"Change password":"Turn on password";
+  $("lockNow").hidden=$("lockOff").hidden=!lock;
+}
+function unlockFlow(e){
+  return new Promise(resolve=>{
+    document.body.classList.add("locked"); $("lock").hidden=false; setTimeout(()=>$("lockIn").focus(),50);
+    if(!window.crypto || !crypto.subtle) $("lockErr").textContent="This browser can't open a locked tracker. Use the https:// link.";
+    $("lockForm").onsubmit=async ev=>{
+      ev.preventDefault(); $("lockErr").textContent=""; $("lockBtn").disabled=true; $("lockBtn").textContent="Unlocking…";
+      try{
+        const salt=fromB64(e.salt), key=await deriveKey($("lockIn").value,salt), o=await decryptObj(key,e);
+        lock={key,salt}; applyData(o);
+        $("lockIn").value=""; $("lock").hidden=true; document.body.classList.remove("locked");
+        resolve();
+      }catch(err){ $("lockErr").textContent="That password isn't right. Try again."; $("lockIn").select(); }
+      $("lockBtn").disabled=false; $("lockBtn").textContent="Unlock";
+    };
+  });
+}
+$("lockForgot").addEventListener("click",()=>{
+  if(!confirm("Without the password, the sales saved on this device can't be opened.\n\nErase everything saved on this device and start over? You can then restore a backup if you have one.")) return;
+  try{ localStorage.removeItem(LS_KEY); localStorage.removeItem(KEY_KEY); }catch(e){}
+  location.reload();
+});
+$("lockSet").addEventListener("click", async()=>{
+  const a=$("lockPw").value, b=$("lockPw2").value;
+  if(a.length<4){ toast("Use at least 4 characters."); return; }
+  if(a!==b){ toast("The two passwords don't match."); return; }
+  if(!window.crypto || !crypto.subtle){ toast("This browser can't set a password here."); return; }
+  const wasOn=!!lock;
+  if(!wasOn) state.apiKey=getApiKey();
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  lock={key:await deriveKey(a,salt), salt};
+  saveLocal(); await saveChain;
+  if(!storageOk){ toast("Couldn't save on this device."); return; }
+  if(!wasOn){ try{ localStorage.removeItem(KEY_KEY); }catch(e){} }
+  $("lockPw").value=$("lockPw2").value="";
+  updateLockUI(); toast(wasOn?"Password changed.":"Password is on.");
+});
+$("lockNow").addEventListener("click", async()=>{ await saveChain; location.reload(); });
+$("lockOff").addEventListener("click", async()=>{
+  const pw=prompt("Enter your password to turn it off:"); if(pw==null) return;
+  await saveChain;
+  try{ const e=readRaw().enc; await decryptObj(await deriveKey(pw,fromB64(e.salt)),e); }
+  catch(err){ toast("That password isn't right."); return; }
+  const api=state.apiKey||""; lock=null; saveLocal(); setApiKey(api); delete state.apiKey;
+  updateLockUI(); toast("Password turned off.");
+});
+let hiddenAt=0;
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){ hiddenAt=Date.now(); return; }
+  if(lock && hiddenAt && Date.now()-hiddenAt>5*60*1000) saveChain.then(()=>location.reload());
+});
+
 /* ---------- start ---------- */
-loadLocal(); fillSettings(); showStoreNote(); render();
-if(!state.settings.bcTerms.length) $("settings").open=true;
+(async()=>{
+  const raw=readRaw();
+  if(raw && raw.enc) await unlockFlow(raw.enc); else applyData(raw);
+  fillSettings(); showStoreNote(); updateLockUI(); render();
+  if(!state.settings.bcTerms.length) $("settings").open=true;
+})();
 })();
 </script>
 </body>
