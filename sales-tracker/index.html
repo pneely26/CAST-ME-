@@ -231,11 +231,11 @@ dialog::backdrop{background:rgba(10,16,30,.5)}
     <summary>Settings</summary>
     <div class="field">
       <label for="setTerms">Your BC as it appears in the logs (separate with commas)</label>
-      <input id="setTerms" placeholder="Floyd-Burnett, 104040">
+      <input id="setTerms" placeholder="Your name, BC number">
     </div>
     <div class="field">
       <label for="setLabel">BC name printed on your reports</label>
-      <input id="setLabel" placeholder="Floyd-Burnett (104040)">
+      <input id="setLabel" placeholder="Your name (BC number)">
     </div>
     <div class="field">
       <label>Commission tiers (RVOL at or above → amount)</label>
@@ -312,8 +312,8 @@ const $ = id => document.getElementById(id);
 
 /* ---------- defaults ---------- */
 const DEFAULT_SETTINGS = {
-  bcTerms: ["Floyd-Burnett", "104040"],
-  bcLabel: "Floyd-Burnett (104040)",
+  bcTerms: [],
+  bcLabel: "",
   tiers: [{min:5, amt:546}, {min:2, amt:318}, {min:1, amt:67}],
   weekStart: 1
 };
@@ -737,6 +737,7 @@ async function readRowsWithClaude(prompt){
 }
 
 async function extract(file){
+  if(!state.settings.bcTerms.length) return {file:file.name, error:"Add your BC name or number in Settings first, so the tracker knows which sales are yours."};
   const parsed=await readPdf(file);
   if(!parsed.header) return {file:file.name, error:"This doesn't look like a sales listing. No table header was found."};
   if(!parsed.rows.length) return {file:file.name, added:0, updated:0, same:0, none:true, saleDate:parsed.saleDate};
@@ -906,6 +907,7 @@ try{ navigator.storage && navigator.storage.persist && navigator.storage.persist
 
 /* ---------- start ---------- */
 loadLocal(); fillSettings(); showStoreNote(); render();
+if(!state.settings.bcTerms.length) $("settings").open=true;
 })();
 </script>
 </body>
