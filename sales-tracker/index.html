@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sales &amp; Commission Tracker</title>
+<meta name="description" content="Track your sales and weekly commission. Upload sales logs, edit sales, and save reports.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#15233F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commission">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script>
+try{ var L=JSON.parse(localStorage.getItem("salesTracker.look")||"{}"); if(L.mode==="light"||L.mode==="dark") document.documentElement.setAttribute("data-theme",L.mode); }catch(e){}
+</script>
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="vendor/anthropic.min.js"></script>
+<style>
+:root{
+  --paper:#EEF1F4; --card:#FFFFFF; --ink:#15233F; --muted:#5B6A80; --line:#D3DAE3;
+  --gold:#F0B429; --gold-ink:#3D2C00; --ok:#23704F; --warn:#A6451B; --focus:#2F6FEB;
+  --row:#F6F8FA;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1524; --card:#162138; --ink:#E6EBF2; --muted:#9AA8BD; --line:#2A3A57;
+    --gold:#F0B429; --gold-ink:#2B1F00; --ok:#5CC495; --warn:#F08A5D; --focus:#7AA7FF; --row:#1B2843;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1524; --card:#162138; --ink:#E6EBF2; --muted:#9AA8BD; --line:#2A3A57;
+  --gold:#F0B429; --gold-ink:#2B1F00; --ok:#5CC495; --warn:#F08A5D; --focus:#7AA7FF; --row:#1B2843;
+  color-scheme: dark;
+}
+:root{--brand:var(--ink);--brand-ink:var(--paper)}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--paper)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 64px}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* Header */
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.top h1{margin:0;font-size:1.05rem;font-weight:700;font-stretch:100%;letter-spacing:.01em}
+.store{font-size:.8rem;color:var(--muted)}
+.store.bad{color:var(--warn);font-weight:600}
+
+/* Banner (API key / install) */
+.banner{margin-top:12px;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--gold);border-radius:12px;padding:12px 14px;font-size:.92rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner[hidden]{display:none}
+.banner p{margin:0;flex:1 1 220px}
+
+/* Hero: the week's commission, printed like a pay stub total */
+.hero{margin:14px 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--gold)}
+.weeknav{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.weeknav .label{font-weight:600;font-size:1rem}
+.iconbtn{appearance:none;border:1px solid var(--line);background:transparent;border-radius:10px;width:40px;height:40px;cursor:pointer;font-size:1.1rem;line-height:1}
+.iconbtn:hover{background:var(--row)}
+.big{font-stretch:62%;font-weight:800;font-size:clamp(3.4rem,14vw,5.5rem);line-height:.95;margin:12px 0 2px;letter-spacing:-.01em}
+.big small{font-size:.38em;font-weight:600;font-stretch:100%;color:var(--muted);margin-left:6px;letter-spacing:0}
+.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:.92rem}
+.stats b{color:var(--ink);font-weight:700;font-size:1.05rem}
+.rangebar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.chip{appearance:none;border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:.85rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.custom{display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:.9rem}
+.custom.on{display:flex}
+.custom input{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 8px}
+
+/* Weeks overview */
+.weeks{display:grid;gap:6px;margin:-4px 0 18px}
+.weeks h2{margin:0 0 2px;font-size:.9rem;color:var(--muted);font-weight:600}
+.wk{appearance:none;display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+.wk:hover{border-color:var(--muted)}
+.wk[aria-current="true"]{border-color:var(--brand);box-shadow:inset 4px 0 0 var(--gold)}
+.wk .wl{font-weight:600}
+.wk .wn{color:var(--muted);font-size:.88rem}
+.wk .wc{font-weight:800;font-stretch:75%;font-size:1.15rem}
+
+/* Upload */
+.drop{display:block;border:2px dashed var(--line);border-radius:14px;padding:20px 16px;text-align:center;background:var(--card);cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--brand)}
+.drop strong{display:block;font-size:1.1rem}
+.drop span{color:var(--muted);font-size:.9rem}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.log{list-style:none;margin:10px 0 0;padding:0;font-size:.9rem}
+.log li{padding:8px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);margin-top:6px}
+.log li.err{border-color:var(--warn);color:var(--warn)}
+.log li .f{font-weight:600}
+
+/* Actions */
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 10px;align-items:center}
+.btn{appearance:none;border:1px solid var(--brand);background:var(--brand);color:var(--brand-ink);border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.danger{background:transparent;color:var(--warn);border-color:var(--warn)}
+.btn:disabled{opacity:.5;cursor:default}
+.spacer{flex:1}
+
+/* Sales list */
+.day{margin-top:16px}
+.day h3{margin:0 0 6px;font-size:.85rem;font-weight:700;color:var(--muted);display:flex;justify-content:space-between}
+.sale{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:6px;overflow:hidden}
+.sale:hover{border-color:var(--muted)}
+.salemain{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 14px;cursor:pointer;text-align:left;width:100%;appearance:none;background:transparent;border:0}
+.conf{appearance:none;display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;padding:9px 14px;font-size:.88rem;color:var(--muted);cursor:pointer}
+.conf[aria-pressed="true"]{color:var(--ok);font-weight:700}
+.tconf{appearance:none;border:1px solid var(--line);background:transparent;border-radius:6px;width:28px;height:26px;cursor:pointer;color:var(--ok);font-weight:700}
+.bonus{color:var(--ok);font-weight:600}
+
+/* Mentoring + paychecks */
+.panel{margin:0 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.panel[hidden]{display:none}
+.panelhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.panel h2{margin:0;font-size:1rem}
+.panel .sub{color:var(--muted);font-size:.85rem}
+.mbig{font-stretch:62%;font-weight:800;font-size:clamp(2.4rem,10vw,3.4rem);line-height:1;margin:8px 0 4px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.mgrid .wide{grid-column:1/-1}
+.field>span{font-size:.85rem;color:var(--muted)}
+.mgrid input{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 10px;width:100%}
+.mlines{list-style:none;margin:8px 0 0;padding:0;font-size:.92rem}
+.mlines li{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line)}
+.mlines li span small{display:block;color:var(--muted);font-size:.8rem}
+.mlines li b{white-space:nowrap}
+.est{display:inline-block;font-size:.75rem;font-weight:700;color:var(--gold-ink);background:var(--gold);border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+details.paylist{margin-top:12px}
+details.paylist summary{cursor:pointer;font-weight:600;font-size:.92rem;padding:4px 0}
+.payrow{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:.9rem}
+.payrow small{display:block;color:var(--muted);font-size:.8rem}
+details.check{border-top:1px solid var(--line)}
+details.check>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;cursor:pointer;font-size:.92rem}
+details.check>summary::-webkit-details-marker{display:none}
+details.check>summary::before{content:"▸";color:var(--muted);margin-right:-4px}
+details.check[open]>summary::before{content:"▾"}
+details.check>summary .when{flex:1}
+details.check>summary small{display:block;color:var(--muted);font-size:.8rem}
+details.check .body{padding:0 0 12px 14px}
+.salelist{list-style:none;margin:2px 0 6px;padding:0;font-size:.82rem;color:var(--muted)}
+.salelist li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border:0}
+.mlines li.tot{font-weight:800;border-top:2px solid var(--brand)}
+.mlines li.tax{color:var(--muted)}
+.taxpreview{margin-top:8px}
+.paynext2{margin-top:18px;padding-top:14px;border-top:2px dashed var(--line)}
+.sale .co{font-weight:700}
+.sale .comm{font-weight:800;font-stretch:75%;font-size:1.25rem;text-align:right}
+.sale .meta{grid-column:1/-1;color:var(--muted);font-size:.86rem;display:flex;gap:4px 14px;flex-wrap:wrap}
+.flag{color:var(--warn);font-weight:600}
+.tick{color:var(--ok);font-weight:700}
+.empty{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
+
+/* Desktop table */
+.tablewrap{display:none;overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:.78rem;color:var(--muted);font-weight:700;position:sticky;top:0;background:var(--card)}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--row)}
+td.r,th.r{text-align:right}
+td.c,th.c{text-align:center}
+tr.newday td{border-top:2px solid var(--brand)}
+tfoot td{font-weight:700;background:var(--row)}
+@media (min-width:820px){ .tablewrap{display:block} .cards{display:none} }
+
+/* Settings */
+details.settings{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 16px}
+details.settings summary{cursor:pointer;padding:12px 0;font-weight:600}
+details.settings h3{margin:22px 0 4px;font-size:.95rem}
+.field{display:grid;gap:4px;margin:10px 0}
+.field label{font-size:.85rem;color:var(--muted)}
+.field input,.field select{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:8px 10px;width:100%}
+.tiers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.note{font-size:.82rem;color:var(--muted)}
+.note a{color:inherit}
+.hidden-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* Colors */
+.swatches{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+.swatch{appearance:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;position:relative;background:linear-gradient(135deg,var(--a) 0 55%,var(--b) 55% 100%)}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--ink)}
+.swatch.custom{display:flex;align-items:center;justify-content:center;font-size:1.2rem;background:conic-gradient(#e53935,#fdd835,#43a047,#1e88e5,#8e24aa,#e53935);overflow:hidden}
+.swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+
+/* Lock screen */
+body.locked .wrap{display:none}
+.lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--paper);z-index:50}
+.lock[hidden]{display:none}
+.lockcard{width:min(360px,100%);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px 20px;text-align:center}
+.lockcard img{width:64px;height:64px;border-radius:14px}
+.lockcard h1{font-size:1.2rem;margin:12px 0 2px}
+.lockcard p{margin:0;color:var(--muted);font-size:.9rem}
+.lockcard input{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:12px;font-size:1.1rem;margin:16px 0 6px;text-align:center}
+.lockcard .btn{width:100%;padding:12px}
+.lockerr{color:var(--warn);min-height:1.4em;font-size:.9rem;margin-bottom:6px}
+.linkbtn{appearance:none;background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:.85rem;margin-top:14px}
+
+/* Dialog */
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:0;width:min(560px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(10,16,30,.5)}
+.dlg{padding:18px}
+.dlg h2{margin:0 0 8px;font-size:1.15rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.check{display:flex;align-items:center;gap:8px;margin:12px 0}
+.check input{width:20px;height:20px}
+.dlgactions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* Print: only the report */
+#printArea{display:none}
+@media print{
+  body{background:#fff;color:#000}
+  .wrap{display:none}
+  #printArea{display:block;font-family:Helvetica,Arial,sans-serif}
+  #printArea h1{font-size:16pt;margin:0 0 2pt;color:#1F3B66;text-align:center}
+  #printArea p{margin:0 0 8pt;text-align:center;color:#555;font-size:9pt}
+  #printArea table{font-size:8pt;width:100%}
+  #printArea th{background:#1F3B66;color:#fff;position:static}
+  #printArea td,#printArea th{border:1px solid #B8C2D1;padding:3pt 4pt}
+  #printArea .foot{font-size:7.5pt;color:#444;text-align:left;margin-top:6pt}
+  @page{size:landscape;margin:.4in}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Sales &amp; commission tracker</h1>
+    <span class="store" id="storeNote">Saved on this device</span>
+  </div>
+
+  <div class="banner" id="installBanner" hidden>
+    <p>Install the tracker so it opens like an app, even offline.</p>
+    <button class="btn" id="installBtn">Install</button>
+  </div>
+
+  <section class="hero" aria-live="polite">
+    <div class="weeknav">
+      <button class="iconbtn" id="prevWk" aria-label="Previous week">‹</button>
+      <span class="label" id="rangeLabel">This week</span>
+      <button class="iconbtn" id="nextWk" aria-label="Next week">›</button>
+    </div>
+    <div class="big num" id="bigComm">$0<small>commission</small></div>
+    <div class="stats num">
+      <span><b id="stSales">0</b> sales</span>
+      <span><b id="stRvol">0.0</b> RVOL</span>
+      <span><b id="stFee">$0</b> in fees</span>
+    </div>
+    <div class="rangebar" role="group" aria-label="Date range">
+      <button class="chip" id="modeWeek" aria-pressed="true">Week</button>
+      <button class="chip" id="modeCustom" aria-pressed="false">Custom dates</button>
+      <button class="chip" id="modeAll" aria-pressed="false">All sales</button>
+    </div>
+    <div class="custom" id="customBox">
+      <label>From <input type="date" id="fromDate"></label>
+      <label>To <input type="date" id="toDate"></label>
+    </div>
+  </section>
+
+  <section class="panel" id="mentorCard" aria-live="polite">
+    <div class="panelhead"><h2>Mentoring bonus</h2><span class="sub" id="mPaid"></span></div>
+    <div class="mbig num" id="mTotal">$0</div>
+    <div class="mgrid">
+      <label class="field"><span>Appointments this week</span><input id="mAppts" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+      <label class="field"><span id="mConfLabel">Confirms this week ($10 each)</span><input id="mConf" type="number" min="0" inputmode="numeric"></label>
+      <label class="field"><span id="mSalesLabel">Sales this week (5 = $50, 10 = $100)</span><input id="mSales" type="number" min="0" inputmode="numeric"></label>
+      <label class="field"><span>Other mentoring bonus ($)</span><input id="mExtra" inputmode="decimal" placeholder="0"></label>
+      <label class="field wide"><span>Note</span><input id="mNote" placeholder="What the other bonus is for"></label>
+    </div>
+    <p class="note" style="margin:4px 0 0">Leave Confirms or Sales empty to count them from your saved sales (the grey number). 5 mill confirms ($25) come from sales you mark as confirmed.</p>
+    <ul class="mlines num" id="mLines"></ul>
+  </section>
+
+  <section class="panel" id="payCard">
+    <div class="panelhead"><h2>Paychecks</h2><span class="sub">Taxes are an estimate</span></div>
+    <div id="payNext"></div>
+    <details class="paylist" id="payHistory"><summary id="payHistTitle">Every payday</summary><div id="payList"></div></details>
+    <p class="note" id="payNote"></p>
+    <div class="dlgactions"><button class="btn ghost" id="editPaydays">Change paydays</button><button class="btn ghost" id="editTaxes">Tax settings</button></div>
+  </section>
+
+  <section class="weeks" id="weeks" aria-label="Your weeks"></section>
+
+  <label class="drop" id="drop">
+    <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple>
+    <strong>Upload sales logs</strong>
+    <span>Tap to choose PDFs, or drop them here. Your sales are pulled out and added automatically.</span>
+  </label>
+  <ul class="log" id="log"></ul>
+
+  <div class="actions">
+    <button class="btn" id="savePdf">Save PDF</button>
+    <button class="btn ghost" id="printBtn">Print</button>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="addBtn">Add a sale by hand</button>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="tablewrap" id="tableWrap"></div>
+
+  <details class="settings" id="settings">
+    <summary>Settings</summary>
+    <h3>Colors</h3>
+    <div class="swatches" id="swatches" role="group" aria-label="App color"></div>
+    <div class="rangebar" role="group" aria-label="Light or dark" style="margin-top:10px">
+      <button class="chip" data-mode="auto">Automatic</button>
+      <button class="chip" data-mode="light">Light</button>
+      <button class="chip" data-mode="dark">Dark</button>
+    </div>
+    <span class="note">Changes right away and is remembered on this device. Automatic follows your phone's light or dark setting.</span>
+    <h3>Your sales</h3>
+    <div class="field">
+      <label for="setTerms">Your BC as it appears in the logs (separate with commas)</label>
+      <input id="setTerms" placeholder="Your name, BC number">
+    </div>
+    <div class="field">
+      <label for="setLabel">BC name printed on your reports</label>
+      <input id="setLabel" placeholder="Your name (BC number)">
+    </div>
+    <div class="field">
+      <label>Commission tiers (RVOL at or above → amount)</label>
+      <div class="tiers" id="tierBox"></div>
+      <span class="note">Sales below the lowest tier earn $0 and are flagged.</span>
+    </div>
+    <div class="tiers">
+      <div class="field"><label for="setBoostAfter">After this many sales in a week…</label><input id="setBoostAfter" inputmode="numeric"></div>
+      <div class="field"><label for="setBoostAmt">…each 1 mill sale pays ($)</label><input id="setBoostAmt" inputmode="decimal"></div>
+    </div>
+    <div class="field">
+      <label for="setWeek">Week starts on</label>
+      <select id="setWeek">
+        <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+        <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+      </select>
+    </div>
+    <h3>Mentoring bonus</h3>
+    <div class="field">
+      <label>Appointments in a week (at or above → bonus)</label>
+      <div class="tiers" id="apptTierBox"></div>
+    </div>
+    <div class="field">
+      <label>Sales in a week (at or above → bonus)</label>
+      <div class="tiers" id="countTierBox"></div>
+    </div>
+    <div class="tiers">
+      <div class="field"><label for="setBigRvol">A 5 mill sale is RVOL at or above</label><input id="setBigRvol" inputmode="decimal"></div>
+      <div class="field"><label for="setBigAmt">Bonus per 5 mill sale ($)</label><input id="setBigAmt" inputmode="decimal"></div>
+      <div class="field"><label for="setConfAmt">Each confirmed lead ($)</label><input id="setConfAmt" inputmode="decimal"></div>
+      <div class="field"><label for="setBigConfAmt">Each confirmed 5 mill ($)</label><input id="setBigConfAmt" inputmode="decimal"></div>
+    </div>
+    <span class="note">A confirmed 5 mill sale earns the 5 mill confirm amount instead of the regular confirm amount.</span>
+
+    <h3 id="paydaysHead">Paydays</h3>
+    <div class="field">
+      <label for="setMentorDay">Mentoring bonus is paid every week on (for the week before)</label>
+      <select id="setMentorDay">
+        <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+        <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
+      </select>
+    </div>
+    <div class="tiers">
+      <div class="field"><label for="setRegPay">Regular commission check: any one payday (every 2 weeks after)</label><input type="date" id="setRegPay"></div>
+      <div class="field"><label for="setRegEnd">Last sale date that check pays for</label><input type="date" id="setRegEnd"></div>
+    </div>
+    <span class="note" id="regHint">Regular commission is paid every 2 weeks and covers 2 weeks of sales.</span>
+
+    <h3 id="taxesHead">Taxes (estimate)</h3>
+    <div class="tiers">
+      <div class="field"><label for="taxFedComm">Federal on commission checks (%)</label><input id="taxFedComm" inputmode="decimal"></div>
+      <div class="field"><label for="taxFedMent">Federal on mentoring checks (%)</label><input id="taxFedMent" inputmode="decimal"></div>
+      <div class="field"><label for="taxPreComm">Taken out before taxes, commission checks ($)</label><input id="taxPreComm" inputmode="decimal"></div>
+      <div class="field"><label for="taxPreMent">Taken out before taxes, mentoring checks ($)</label><input id="taxPreMent" inputmode="decimal"></div>
+      <div class="field"><label for="taxState">State income tax (%)</label><input id="taxState" inputmode="decimal"></div>
+      <div class="field"><label for="taxLocal">City / local tax (%)</label><input id="taxLocal" inputmode="decimal"></div>
+      <div class="field"><label for="taxSS">Social Security (%)</label><input id="taxSS" inputmode="decimal"></div>
+      <div class="field"><label for="taxMed">Medicare (%)</label><input id="taxMed" inputmode="decimal"></div>
+    </div>
+    <span class="note">Set from your Sep 2026 pay stubs. Commission checks: $28.48 for dental, vision and telehealth comes out first, then taxes are figured on the rest, with about 11.5% federal. Mentoring checks: nothing taken out first and no federal. Social Security, Medicare and Illinois (4.95%) are flat; Chicago has no city income tax. Federal can drift a little on bigger or smaller checks. Compare with a new stub now and then.</span>
+    <div class="field taxpreview">
+      <label for="taxTry">Try it: a check of ($)</label>
+      <input id="taxTry" inputmode="decimal" placeholder="1000">
+      <span class="note" id="taxTryOut"></span>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="saveSettings">Save settings</button>
+    </div>
+
+    <h3>Reading sales logs</h3>
+    <div class="field">
+      <label for="setKey">Anthropic API key</label>
+      <input id="setKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+      <span class="note">Logs are read by Claude using your own key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. The key stays on this device and is only sent to Anthropic. Not needed for adding sales by hand.</span>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="saveKey">Save key</button>
+      <button class="btn ghost" id="clearKey">Remove key</button>
+    </div>
+
+    <h3>Password lock</h3>
+    <p class="note" id="lockStatus">Off. Anyone using this device can open the tracker.</p>
+    <div class="tiers">
+      <div class="field"><label for="lockPw" id="lockPwLabel">Choose a password</label><input type="password" id="lockPw" autocomplete="new-password"></div>
+      <div class="field"><label for="lockPw2">Type it again</label><input type="password" id="lockPw2" autocomplete="new-password"></div>
+    </div>
+    <div class="dlgactions">
+      <button class="btn" id="lockSet">Turn on password</button>
+      <button class="btn ghost" id="lockNow" hidden>Lock now</button>
+      <button class="btn danger" id="lockOff" hidden>Turn off password</button>
+    </div>
+    <p class="note">The password protects this device only. Your sales and API key here are encrypted with it, and the app locks again when you reopen it or leave it for 5 minutes. Set it on each phone or computer you use. If you forget it, the data on that device can't be recovered, so keep a backup.</p>
+
+    <h3>Backup and other devices</h3>
+    <p class="note">Your sales are saved in this browser only. To move them to another phone or computer, download a backup here and restore it there. Restoring adds to what's already saved. Backup files aren't password protected, so keep them private.</p>
+    <div class="dlgactions" style="margin-bottom:14px">
+      <button class="btn ghost" id="backupBtn">Download backup</button>
+      <button class="btn ghost" id="restoreBtn">Restore from backup</button>
+      <input type="file" id="restoreIn" class="hidden-input" accept="application/json,.json" tabindex="-1" aria-hidden="true">
+    </div>
+    <p class="note" id="iosHint" hidden>To add this to your home screen on iPhone: tap the Share button in Safari, then “Add to Home Screen”.</p>
+  </details>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog" id="editForm">
+    <h2 id="dlgTitle">Edit sale</h2>
+    <div class="grid2">
+      <div class="field"><label for="fSale">Sale date</label><input type="date" id="fSale" required></div>
+      <div class="field"><label for="fPn">PN-Appt</label><input id="fPn" required></div>
+      <div class="field"><label for="fRvol">RVOL</label><input id="fRvol" inputmode="decimal" required></div>
+      <div class="field"><label for="fFee">Fee</label><input id="fFee" inputmode="numeric"></div>
+      <div class="field"><label for="fPar">Par</label><input id="fPar"></div>
+      <div class="field"><label for="fRep">Sales rep</label><input id="fRep"></div>
+      <div class="field"><label for="fRun">Run date</label><input id="fRun" placeholder="MM/DD/YY"></div>
+      <div class="field"><label for="fAppt">Appt date</label><input id="fAppt" placeholder="MM/DD/YY"></div>
+      <div class="field"><label for="fCo">Company</label><input id="fCo"></div>
+      <div class="field"><label for="fTaken">Taken by</label><input id="fTaken"></div>
+      <div class="field"><label for="fBc">BC</label><input id="fBc"></div>
+      <div class="field"><label for="fNote">Note</label><input id="fNote"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="f44"> 44 checked</label>
+    <label class="check"><input type="checkbox" id="fConf"> Confirmed (mentoring bonus)</label>
+    <div class="dlgactions">
+      <button class="btn" id="dlgSave" value="save">Save</button>
+      <button class="btn ghost" id="dlgCancel" value="cancel" formnovalidate>Cancel</button>
+      <span class="spacer"></span>
+      <button class="btn danger" id="dlgDelete" value="delete" formnovalidate>Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="printArea"></div>
+<div class="lock" id="lock" hidden>
+  <form class="lockcard" id="lockForm">
+    <img src="icons/icon-192.png" alt="">
+    <h1>Sales &amp; commission tracker</h1>
+    <p>Enter your password to open.</p>
+    <input type="text" name="username" value="Sales tracker" autocomplete="username" hidden>
+    <input type="password" id="lockIn" autocomplete="current-password" aria-label="Password" required>
+    <div class="lockerr" id="lockErr" role="alert"></div>
+    <button class="btn" id="lockBtn">Unlock</button>
+    <button type="button" class="linkbtn" id="lockForgot">Forgot password?</button>
+  </form>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ---------- defaults ---------- */
+const DEFAULT_SETTINGS = {
+  bcTerms: [],
+  bcLabel: "",
+  tiers: [{min:5, amt:546}, {min:2, amt:318}, {min:1, amt:67}],
+  weekStart: 1,
+  // In a week, from the 6th sale on, a sale at the lowest (1 mill) level pays this instead of $67.
+  boost: { after: 5, amt: 112 },
+  mentor: {
+    apptTiers: [{min:50, amt:50}, {min:60, amt:75}],
+    countTiers: [{min:5, amt:50}, {min:10, amt:100}],
+    bigRvol: 5, bigSaleAmt: 50,
+    confirmAmt: 10, bigConfirmAmt: 25
+  },
+  // Mentoring paid every Friday for the week before. Regular commission every other Friday:
+  // the Oct 9, 2026 check pays sales through Fri Oct 2 (the 2 weeks ending that day).
+  pay: { mentorDay: 5, regPayday: "2026-10-09", regEnd: "2026-10-02" },
+  // Estimated withholding, in percent of each check (other = dollars per check).
+  // Chicago, IL, single: federal 22% supplemental rate, Illinois flat 4.95%, no Chicago income tax.
+  // From the Sep 11, 2026 commission stub and the Sep 5 mentoring stub.
+  tax: { fedComm: 11.5, fedMent: 0, preComm: 28.48, preMent: 0, state: 4.95, ss: 6.2, med: 1.45, local: 0, v: 3 }
+};
+function mergeSettings(o){
+  const d=structuredClone(DEFAULT_SETTINGS); o=o||{};
+  const pay=Object.assign({}, d.pay, o.pay||{});
+  // Older versions stored the first sale day of a check; the Sep 21 default meant "through Oct 2".
+  if(!pay.regEnd && pay.regStart) pay.regEnd = pay.regStart==="2026-09-21" ? "2026-10-02" : addDays(pay.regStart,13);
+  delete pay.regStart;
+  if(!pay.regPayday || !pay.regEnd){ pay.regPayday=d.pay.regPayday; pay.regEnd=d.pay.regEnd; }
+  // Settings saved before the pay stubs were matched use the stub-based rates (keeping a custom city rate).
+  const tax = (o.tax && o.tax.v===3) ? Object.assign(d.tax, o.tax) : Object.assign(d.tax, {local:Number(o.tax&&o.tax.local)||0});
+  return Object.assign(d, o, {mentor:Object.assign(d.mentor, o.mentor||{}), pay, tax});
+}
+const MODEL = "claude-opus-5-5";
+
+const state = {
+  sales: new Map(),           // id -> sale
+  mentoring: {},              // week start ISO -> {appts, extra, note}
+  settings: structuredClone(DEFAULT_SETTINGS),
+  mode: "week",               // week | custom | all
+  weekAnchor: todayISO(),
+  from: null, to: null,
+  editingId: null
+};
+
+/* ---------- date helpers ---------- */
+function todayISO(){ const d=new Date(); return iso(d); }
+function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function parseISO(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d,12); }
+function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
+function short(s){ if(!s) return ""; const [y,m,d]=s.split("-"); return m+"/"+d+"/"+y.slice(2); }
+function nice(s){ return parseISO(s).toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
+// any date-ish string -> MM/DD/YY
+function mdy(s){
+  if(!s) return "";
+  const m = String(s).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return String(s).trim();
+  return m[1].padStart(2,"0")+"/"+m[2].padStart(2,"0")+"/"+m[3].slice(-2);
+}
+function mdyToISO(s){
+  const m = String(s||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return null;
+  let y = m[3].length===2 ? "20"+m[3] : m[3];
+  return y+"-"+m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0");
+}
+function weekBounds(anchor){
+  const d=parseISO(anchor); const diff=(d.getDay()-state.settings.weekStart+7)%7;
+  const start=addDays(anchor,-diff); return [start, addDays(start,6)];
+}
+function currentRange(){
+  if(state.mode==="week") return weekBounds(state.weekAnchor);
+  if(state.mode==="custom") return [state.from||"0000-01-01", state.to||"9999-12-31"];
+  return ["0000-01-01","9999-12-31"];
+}
+
+/* ---------- money ---------- */
+const money = n => "$"+Math.round(n).toLocaleString("en-US");
+// Sales that get the bigger 1 mill amount: in each week, sales after the first `after`
+// (by sale date) that land in the lowest commission tier.
+let boostCache=null;
+function boostedSales(){
+  if(boostCache) return boostCache;
+  const set=new Set(), b=state.settings.boost||{}, after=Number(b.after);
+  const low=[...state.settings.tiers].filter(t=>!isNaN(t.min)).sort((a,b)=>a.min-b.min)[0];
+  if(low && Number(b.amt)>0 && !isNaN(after)){
+    const weeks=new Map();
+    for(const s of state.sales.values()){ if(!s.saleDate) continue; const k=weekBounds(s.saleDate)[0]; (weeks.get(k)||weeks.set(k,[]).get(k)).push(s); }
+    for(const list of weeks.values()){
+      list.sort((x,y)=>x.saleDate.localeCompare(y.saleDate) || String(x.pn).localeCompare(String(y.pn)));
+      list.forEach((s,i)=>{ if(i>=after && commission(s.rvol)===low.amt) set.add(s.id||safeId(s.pn)); });
+    }
+  }
+  return boostCache=set;
+}
+function saleComm(s){
+  const c=commission(s.rvol);
+  return c!=null && boostedSales().has(s.id||safeId(s.pn)) ? Number(state.settings.boost.amt) : c;
+}
+function ordinal(n){ const v=n%100; return n+(["th","st","nd","rd"][(v-20)%10]||["th","st","nd","rd"][v]||"th"); }
+const isBoosted = s => boostedSales().has(s.id||safeId(s.pn));
+function commission(rvol){
+  const v=parseFloat(rvol); if(isNaN(v)) return null;
+  const tiers=[...state.settings.tiers].filter(t=>!isNaN(t.min)).sort((a,b)=>b.min-a.min);
+  for(const t of tiers) if(v>=t.min) return t.amt;
+  return null;
+}
+
+/* ---------- mentoring bonus + paydays ---------- */
+function tierAmt(tiers,v){ let best=0; for(const t of tiers||[]) if(!isNaN(t.min) && v>=t.min && t.amt>best) best=t.amt; return best; }
+function nextTier(tiers,v){ return (tiers||[]).filter(t=>!isNaN(t.min) && t.min>v).sort((a,b)=>a.min-b.min)[0]||null; }
+const isBig = s => parseFloat(s.rvol) >= Number(state.settings.mentor.bigRvol);
+function saleBonus(s){
+  const m=state.settings.mentor, big=isBig(s);
+  return (big?Number(m.bigSaleAmt):0) + (s.confirmed?Number(big?m.bigConfirmAmt:m.confirmAmt):0);
+}
+function salesBetween(a,b){ return [...state.sales.values()].filter(s=>s.saleDate>=a && s.saleDate<=b); }
+function mentorWeek(ws){
+  const m=state.settings.mentor, we=addDays(ws,6), list=salesBetween(ws,we);
+  const big=list.filter(isBig).length, conf=list.filter(s=>s.confirmed);
+  const confBig=conf.filter(isBig).length, autoConf=conf.length-confBig;
+  const e=state.mentoring[ws]||{}, appts=Number(e.appts)||0, extra=Number(e.extra)||0;
+  const has=v=>v!==undefined && v!==null && v!=="";
+  // A number typed for the week replaces the count worked out from saved sales.
+  const manualConf=has(e.confirms), manualSales=has(e.sales);
+  const confReg=manualConf?Number(e.confirms):autoConf, n=manualSales?Number(e.sales):list.length;
+  const lines={
+    appts:tierAmt(m.apptTiers,appts), big:big*Number(m.bigSaleAmt), count:tierAmt(m.countTiers,n),
+    conf:confReg*Number(m.confirmAmt)+confBig*Number(m.bigConfirmAmt), extra
+  };
+  return {ws, we, n, autoN:list.length, manualSales, big, confReg, autoConf, manualConf, confBig, appts, extra, note:e.note||"",
+    confirms:manualConf?Number(e.confirms):"", sales:manualSales?Number(e.sales):"", lines, total:Object.values(lines).reduce((a,b)=>a+b,0)};
+}
+function dayDiff(a,b){ return Math.round((parseISO(b)-parseISO(a))/864e5); }
+// Mentoring for a week is paid on the first mentoring payday after the week ends.
+function mentorPayday(ws){ let d=addDays(ws,7); while(parseISO(d).getDay()!==Number(state.settings.pay.mentorDay)) d=addDays(d,1); return d; }
+function regPeriodFor(day){
+  const p=state.settings.pay; if(!p.regPayday || !p.regEnd) return null;
+  const k=dayDiff(p.regPayday,day); if(k%14!==0) return null;
+  const end=addDays(p.regEnd,k); return [addDays(end,-13), end];
+}
+// Commission and mentoring are paid as separate checks: each has its own federal rate and
+// before-tax deductions; the other taxes are figured on what's left after those deductions.
+function taxPart(gross, kind, t){
+  if(!(gross>0)) return [];
+  const pre=Math.min(gross, Number(kind==="comm"?t.preComm:t.preMent)||0), base=gross-pre;
+  const lines=[];
+  if(pre) lines.push({key:"pre", label:"Insurance (before taxes)", amt:pre});
+  for(const [key,label,r] of [["fed","Federal income tax",kind==="comm"?t.fedComm:t.fedMent],["state","Illinois income tax",t.state],["ss","Social Security",t.ss],["med","Medicare",t.med],["local","City / local tax",t.local]])
+    if(Number(r)>0) lines.push({key, label, amt:Math.round(base*Number(r))/100});
+  return lines;
+}
+function taxesOn(commGross, mentGross, t){
+  t=t||state.settings.tax;
+  const merged=new Map();
+  for(const l of [...taxPart(commGross,"comm",t), ...taxPart(mentGross,"ment",t)]){
+    const m=merged.get(l.key); if(m) m.amt=Math.round((m.amt+l.amt)*100)/100; else merged.set(l.key, Object.assign({},l));
+  }
+  const lines=[...merged.values()], total=lines.reduce((a,l)=>a+l.amt,0), gross=(commGross||0)+(mentGross||0);
+  return {lines, total, net:Math.max(0,gross-total)};
+}
+const checkTaxes = c => taxesOn(c.reg?c.reg.amt:0, c.mentor?c.mentor.total:0);
+const cents = n => "$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+function paycheckOn(day){
+  let mentor=null, reg=null;
+  if(parseISO(day).getDay()===Number(state.settings.pay.mentorDay)) mentor=mentorWeek(addDays(weekBounds(day)[0],-7));
+  const per=regPeriodFor(day);
+  if(per){ const list=salesBetween(per[0],per[1]).sort((a,b)=>a.saleDate.localeCompare(b.saleDate)); reg={from:per[0], to:per[1], n:list.length, list, amt:list.reduce((t,s)=>t+(saleComm(s)||0),0)}; }
+  if(!mentor && !reg) return null;
+  return {date:day, mentor, reg, total:(mentor?mentor.total:0)+(reg?reg.amt:0)};
+}
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),3200); }
+
+/* ---------- storage (this device) ---------- */
+const LS_KEY="salesTracker.v1", KEY_KEY="salesTracker.apiKey";
+let storageOk=true;
+function safeId(pn){ return String(pn).trim().replace(/[^A-Za-z0-9_\-.~:@+]/g,"_").slice(0,180) || ("s"+Date.now()); }
+// With the password lock on, everything saved on the device is encrypted (AES-GCM, key from PBKDF2).
+let lock=null;                 // {key, salt} while unlocked with a password
+let saveChain=Promise.resolve();
+const enc=new TextEncoder(), dec=new TextDecoder();
+function toB64(buf){ const u=new Uint8Array(buf); let s=""; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); }
+function fromB64(s){ const b=atob(s), u=new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+async function deriveKey(pw,salt){
+  const base=await crypto.subtle.importKey("raw",enc.encode(pw),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function encryptObj(key,salt,obj){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(obj)));
+  return {salt:toB64(salt), iv:toB64(iv), ct:toB64(ct)};
+}
+async function decryptObj(key,e){ return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:fromB64(e.iv)},key,fromB64(e.ct)))); }
+function readRaw(){ try{ const raw=localStorage.getItem(LS_KEY); return raw?JSON.parse(raw):null; }catch(e){ storageOk=false; return null; } }
+function applyData(o){
+  if(!o) return;
+  boostCache=null;
+  if(o.settings) state.settings=mergeSettings(o.settings);
+  state.sales=new Map(Object.entries(o.sales||{}));
+  state.mentoring=o.mentoring||{};
+  if("apiKey" in o) state.apiKey=o.apiKey||"";
+}
+function dataToSave(){ return {settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring}; }
+function saveLocal(){
+  boostCache=null;
+  if(lock){
+    const snap=Object.assign(dataToSave(),{apiKey:state.apiKey||""}), l=lock;
+    saveChain=saveChain.then(async()=>{ localStorage.setItem(LS_KEY, JSON.stringify({enc:await encryptObj(l.key,l.salt,snap)})); storageOk=true; })
+      .catch(()=>{ storageOk=false; }).then(showStoreNote);
+    return;
+  }
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(dataToSave())); storageOk=true; }
+  catch(e){ storageOk=false; }
+  showStoreNote();
+}
+function showStoreNote(){
+  const n=$("storeNote");
+  n.textContent=storageOk?"Saved on this device":"This browser isn't letting the tracker save. Private browsing may be on.";
+  n.classList.toggle("bad",!storageOk);
+}
+async function putSale(sale){
+  const id=safeId(sale.pn); sale.id=id; sale.updatedAt=new Date().toISOString();
+  state.sales.set(id,sale); saveLocal();
+}
+async function removeSale(id){ state.sales.delete(id); saveLocal(); }
+async function putSettings(){ saveLocal(); }
+
+function getApiKey(){ if(lock) return state.apiKey||""; try{ return localStorage.getItem(KEY_KEY)||""; }catch(e){ return ""; } }
+function setApiKey(k){ if(lock){ state.apiKey=k||""; saveLocal(); return true; } try{ if(k) localStorage.setItem(KEY_KEY,k); else localStorage.removeItem(KEY_KEY); return true; }catch(e){ return false; } }
+
+/* ---------- rendering ---------- */
+function salesInRange(){
+  const [a,b]=currentRange();
+  return [...state.sales.values()].filter(s=>s.saleDate>=a && s.saleDate<=b)
+    .sort((x,y)=> x.saleDate.localeCompare(y.saleDate) || (x.rep||"").localeCompare(y.rep||"") || (x.company||"").localeCompare(y.company||""));
+}
+function rangeText(){
+  const [a,b]=currentRange();
+  if(state.mode==="all"){
+    const all=[...state.sales.values()].map(s=>s.saleDate).sort();
+    return all.length ? nice(all[0])+" – "+nice(all[all.length-1]) : "All sales";
+  }
+  if(state.mode==="custom" && (!state.from||!state.to)) return "Pick dates";
+  return nice(a)+" – "+nice(b);
+}
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderWeeks(){
+  const byWeek=new Map();
+  for(const s of state.sales.values()){ if(!s.saleDate) continue; const [a]=weekBounds(s.saleDate); const w=byWeek.get(a)||{n:0,c:0}; w.n++; w.c+=saleComm(s)||0; byWeek.set(a,w); }
+  const keys=[...byWeek.keys()].sort().reverse();
+  if(!keys.length){ $("weeks").innerHTML=""; return; }
+  const cur=state.mode==="week"?weekBounds(state.weekAnchor)[0]:null;
+  $("weeks").innerHTML="<h2>Your weeks</h2>"+keys.map(k=>{ const w=byWeek.get(k);
+    return `<button class="wk" data-week="${k}" aria-current="${k===cur}"><span><span class="wl">${nice(k)} – ${nice(addDays(k,6))}</span><br><span class="wn">${w.n} sale${w.n===1?"":"s"}${(()=>{ const mt=mentorWeek(k).total; return mt?" · "+money(mt)+" mentoring":""; })()}</span></span><span class="wc num">${money(w.c)}</span></button>`; }).join("");
+}
+$("weeks").addEventListener("click",e=>{ const b=e.target.closest("[data-week]"); if(!b) return; state.weekAnchor=b.dataset.week; setMode("week"); });
+
+function render(){
+  renderWeeks(); renderMentor(); renderPay();
+  const list=salesInRange();
+  let tc=0,tr=0,tf=0, flagged=0;
+  for(const s of list){ const c=saleComm(s); if(c==null) flagged++; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; }
+  $("rangeLabel").textContent=rangeText();
+  $("bigComm").innerHTML=money(tc)+"<small>commission</small>";
+  $("stSales").textContent=list.length; $("stRvol").textContent=tr.toFixed(1); $("stFee").textContent=money(tf);
+  const showNav=state.mode==="week";
+  $("prevWk").style.visibility=showNav?"visible":"hidden"; $("nextWk").style.visibility=showNav?"visible":"hidden";
+  $("savePdf").disabled=$("printBtn").disabled=!list.length;
+
+  if(!list.length){
+    const msg = state.sales.size ? "No sales in this range. Use the arrows to change weeks, or upload a log." : "No sales yet. Upload a sales log to get started.";
+    $("cards").innerHTML=`<div class="empty">${msg}</div>`;
+    $("tableWrap").innerHTML=`<div class="empty" style="border:0">${msg}</div>`;
+    return;
+  }
+  // cards
+  let html="", day=null;
+  const byDay={}; for(const s of list){ (byDay[s.saleDate] ||= []).push(s); }
+  for(const d of Object.keys(byDay)){
+    const items=byDay[d]; const dc=items.reduce((t,s)=>t+(saleComm(s)||0),0);
+    html+=`<div class="day"><h3><span>${esc(parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}))}</span><span class="num">${money(dc)}</span></h3>`;
+    for(const s of items){
+      const c=saleComm(s);
+      const bn=saleBonus(s);
+      html+=`<div class="sale"><button class="salemain" data-id="${esc(s.id)}">
+        <span class="co">${esc(s.company)}</span>
+        <span class="comm num">${c==null?'<span class="flag">$0</span>':money(c)}</span>
+        <span class="meta num"><span>${esc(s.rep)}</span><span>RVOL ${esc(s.rvol)}</span><span>Fee ${Number(s.fee||0).toLocaleString()}</span><span>Run ${esc(s.runDate)}</span><span>Appt ${esc(s.apptDate)}</span>${s.c44?'<span class="tick">44 ✓</span>':'<span>44 blank</span>'}${s.takenBy?`<span>Taken by ${esc(s.takenBy)}</span>`:""}${s.par?`<span>Par ${esc(s.par)}</span>`:""}${c==null?'<span class="flag">Below lowest tier</span>':""}${isBoosted(s)?`<span class="bonus">${ordinal(Number(state.settings.boost.after)+1)}+ sale this week: ${money(c)}</span>`:""}${bn?`<span class="bonus">Mentoring +${money(bn)}</span>`:""}${s.note?`<span>${esc(s.note)}</span>`:""}</span>
+      </button><button class="conf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}">${s.confirmed?"✓ Confirmed":"Mark as confirmed"}</button></div>`;
+    }
+    html+="</div>";
+  }
+  $("cards").innerHTML=html;
+  // table
+  let t=`<table><thead><tr><th>Sale date</th><th class="r">RVOL</th><th>Par</th><th>Sales rep</th><th>Run date</th><th>Company</th><th class="r">Fee</th><th>Taken by</th><th class="c">44</th><th>Appt date</th><th class="c">Conf</th><th class="r">Commission</th></tr></thead><tbody>`;
+  for(const s of list){
+    const c=saleComm(s); const nd=s.saleDate!==day; day=s.saleDate;
+    t+=`<tr data-id="${esc(s.id)}" class="${nd?"newday":""}"><td>${nd?short(s.saleDate):""}</td><td class="r num">${esc(s.rvol)}</td><td>${esc(s.par)}</td><td>${esc(s.rep)}</td><td class="num">${esc(s.runDate)}</td><td>${esc(s.company)}${s.note?' <span class="flag" title="'+esc(s.note)+'">*</span>':""}</td><td class="r num">${Number(s.fee||0).toLocaleString()}</td><td>${esc(s.takenBy)}</td><td class="c">${s.c44?'<span class="tick">✓</span>':""}</td><td class="num">${esc(s.apptDate)}</td><td class="c"><button class="tconf" data-conf="${esc(s.id)}" aria-pressed="${!!s.confirmed}" aria-label="${s.confirmed?"Confirmed. Tap to unmark":"Mark as confirmed"}">${s.confirmed?"✓":""}</button></td><td class="r num"><b>${c==null?'<span class="flag">$0</span>':money(c)}</b></td></tr>`;
+  }
+  t+=`</tbody><tfoot><tr><td>Total</td><td class="r num">${tr.toFixed(1)}</td><td></td><td>${list.length} sales</td><td></td><td></td><td class="r num">${tf.toLocaleString()}</td><td></td><td class="c">${list.filter(s=>s.c44).length}</td><td></td><td class="c">${list.filter(s=>s.confirmed).length}</td><td class="r num">${money(tc)}</td></tr></tfoot></table>`;
+  $("tableWrap").innerHTML=t;
+}
+
+/* ---------- mentoring card ---------- */
+let mentorWs=null;
+function renderMentor(){
+  const card=$("mentorCard");
+  if(state.mode!=="week"){ card.hidden=true; return; }
+  card.hidden=false;
+  const ws=weekBounds(state.weekAnchor)[0], mw=mentorWeek(ws), m=state.settings.mentor;
+  if(mentorWs!==ws){ mentorWs=ws; $("mAppts").value=mw.appts||""; $("mConf").value=mw.confirms; $("mSales").value=mw.sales; $("mExtra").value=mw.extra||""; $("mNote").value=mw.note; }
+  $("mConf").placeholder=String(mw.autoConf); $("mSales").placeholder=String(mw.autoN);
+  $("mConfLabel").textContent="Confirms this week ("+money(m.confirmAmt)+" each)";
+  $("mSalesLabel").textContent="Sales this week ("+[...m.countTiers].sort((a,b)=>a.min-b.min).map(t=>t.min+" = "+money(t.amt)).join(", ")+")";
+  const pd=mentorPayday(ws);
+  $("mPaid").textContent=(pd>=todayISO()?"Paid ":"Was paid ")+parseISO(pd).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  $("mTotal").textContent=money(mw.total);
+  const more=(tiers,v,what)=>{ const t=nextTier(tiers,v); return t?`<small>${t.min-v} more ${what} for ${money(t.amt)}</small>`:""; };
+  const li=(label,sub,amt)=>`<li><span>${label}${sub||""}</span><b>${money(amt)}</b></li>`;
+  const confParts=[]; if(mw.confReg) confParts.push(mw.confReg+" × "+money(m.confirmAmt)); if(mw.confBig) confParts.push(mw.confBig+" five mill × "+money(m.bigConfirmAmt));
+  $("mLines").innerHTML=
+    li("Appointments: "+mw.appts, more(m.apptTiers,mw.appts,"appointments"), mw.lines.appts)+
+    li("5 mill sales: "+mw.big+" × "+money(m.bigSaleAmt), "", mw.lines.big)+
+    li("Sales this week: "+mw.n+(mw.manualSales?" (entered)":""), more(m.countTiers,mw.n,"sales"), mw.lines.count)+
+    li("Confirms: "+(mw.confReg+mw.confBig)+(mw.manualConf?" (entered)":""), confParts.length?`<small>${confParts.join(" + ")}</small>`:"<small>Enter your confirms above, or mark sales as confirmed</small>", mw.lines.conf)+
+    (mw.extra?li("Other"+(mw.note?": "+esc(mw.note):""), "", mw.extra):"");
+}
+function saveMentorInputs(){
+  if(!mentorWs) return;
+  const count=id=>{ const v=String($(id).value).trim(); if(v==="") return ""; const n=parseInt(v,10); return isNaN(n)||n<0?"":n; };
+  const e={appts:parseInt($("mAppts").value,10)||0, confirms:count("mConf"), sales:count("mSales"),
+    extra:parseFloat(String($("mExtra").value).replace(/[$,]/g,""))||0, note:$("mNote").value.trim()};
+  if(!e.appts && e.confirms==="" && e.sales==="" && !e.extra && !e.note) delete state.mentoring[mentorWs]; else state.mentoring[mentorWs]=e;
+  saveLocal(); renderMentor(); renderWeeks(); renderPay();
+}
+["mAppts","mConf","mSales","mExtra","mNote"].forEach(id=>$(id).addEventListener("input",saveMentorInputs));
+
+/* ---------- paychecks ---------- */
+$("editPaydays").addEventListener("click",()=>{ $("settings").open=true; $("paydaysHead").scrollIntoView({behavior:"smooth",block:"start"}); });
+$("editTaxes").addEventListener("click",()=>{ $("settings").open=true; $("taxesHead").scrollIntoView({behavior:"smooth",block:"start"}); });
+function renderPay(){
+  const today=todayISO(), checks=[];
+  // every payday from your first sale (or mentoring entry) through the next 4 weeks
+  let first=addDays(today,-42);
+  for(const s of state.sales.values()) if(s.saleDate && s.saleDate<first) first=s.saleDate;
+  for(const k of Object.keys(state.mentoring)) if(k<first) first=k;
+  for(let d=first, end=addDays(today,28); d<=end; d=addDays(d,1)){ const c=paycheckOn(d); if(c) checks.push(c); }
+  const next=checks.find(c=>c.date>=today);
+  const fmt=d=>parseISO(d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+  const unfinished=c=>(c.mentor && c.mentor.we>=today) || (c.reg && c.reg.to>=today);
+  const parts=c=>{
+    let h="";
+    if(c.mentor) h+=`<li><span>Mentoring bonus<small>Week of ${nice(c.mentor.ws)} – ${nice(c.mentor.we)}</small></span><b>${money(c.mentor.total)}</b></li>`;
+    if(c.reg) h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}</small></span><b>${money(c.reg.amt)}</b></li>`;
+    return h;
+  };
+  const taxBlock=c=>{
+    const tx=checkTaxes(c);
+    return `<li class="tot"><span>Gross pay</span><b>${cents(c.total)}</b></li>`
+      + tx.lines.map(l=>`<li class="tax"><span>${esc(l.label)}</span><b>−${cents(l.amt)}</b></li>`).join("")
+      + `<li class="tot"><span>Take-home (estimate)</span><b>${cents(tx.net)}</b></li>`;
+  };
+  const detail=c=>{
+    let h="";
+    if(c.mentor){
+      const m=c.mentor, bits=[];
+      if(m.lines.appts) bits.push(m.appts+" appointments "+money(m.lines.appts));
+      if(m.lines.big) bits.push(m.big+" five mill "+money(m.lines.big));
+      if(m.lines.count) bits.push(m.n+" sales "+money(m.lines.count));
+      if(m.lines.conf) bits.push((m.confReg+m.confBig)+" confirms "+money(m.lines.conf));
+      if(m.extra) bits.push("other "+money(m.extra));
+      h+=`<li><span>Mentoring bonus<small>Week of ${nice(m.ws)} – ${nice(m.we)}${bits.length?" · "+esc(bits.join(", ")):""}</small></span><b>${money(m.total)}</b></li>`;
+    }
+    if(c.reg){
+      h+=`<li><span>Commission<small>${c.reg.n} sale${c.reg.n===1?"":"s"}, ${nice(c.reg.from)} – ${nice(c.reg.to)}${c.reg.n?"":" · no sales saved for these dates yet"}</small>`
+        + (c.reg.list.length?`<ul class="salelist">${c.reg.list.map(s=>`<li><span>${esc(short(s.saleDate))} · ${esc(s.company||s.pn)} · RVOL ${esc(s.rvol)}</span><span>${money(saleComm(s)||0)}</span></li>`).join("")}</ul>`:"")
+        + `</span><b>${money(c.reg.amt)}</b></li>`;
+    }
+    return h+taxBlock(c);
+  };
+  // Show each upcoming payday up to and including the next commission check.
+  const upcoming=[];
+  for(const c of checks){ if(c.date<today) continue; upcoming.push(c); if(c.reg || upcoming.length>=3) break; }
+  const kindOf=c=>c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring bonus only";
+  $("payNext").innerHTML = upcoming.length
+    ? upcoming.map((c,i)=>`<div class="${i?"paynext2":""}"><div class="sub">${i?"Then":"Next payday"} · ${esc(fmt(c.date))} · ${kindOf(c)}${unfinished(c)?'<span class="est">So far</span>':""}</div><div class="mbig num">${cents(checkTaxes(c).net)}</div><div class="sub">take-home, from ${money(c.total)} before taxes</div><ul class="mlines num">${detail(c)}</ul></div>`).join("")
+    : `<p class="note">No paydays found. Check your paydays in Settings.</p>`;
+  const others=checks.filter(c=>!upcoming.includes(c) && (c.date>=today || c.total>0)).sort((a,b)=>b.date.localeCompare(a.date));
+  $("payHistTitle").textContent="Every payday ("+others.length+")";
+  $("payList").innerHTML=others.map(c=>{
+    const kind=c.reg&&c.mentor?"Commission + mentoring":c.reg?"Commission":"Mentoring";
+    return `<details class="check"><summary class="num"><span class="when">${esc(fmt(c.date))}${c.date>today?" (upcoming)":""}${unfinished(c)?'<span class="est">So far</span>':""}<small>${kind} · ${money(c.total)} before taxes</small></span><b>${cents(checkTaxes(c).net)}</b></summary><div class="body"><ul class="mlines num">${detail(c)}</ul></div></details>`;
+  }).join("") || '<p class="note">None yet.</p>';
+  $("payNote").textContent = state.settings.pay.regPayday ? "" : "Add your regular commission payday in Settings → Paydays so it's included in your checks.";
+}
+
+/* ---------- settings form ---------- */
+function fillSettings(){
+  const s=state.settings;
+  $("setTerms").value=(s.bcTerms||[]).join(", ");
+  $("setLabel").value=s.bcLabel||"";
+  $("setWeek").value=String(s.weekStart??1);
+  const tiers=[...(s.tiers||[])].sort((a,b)=>b.min-a.min);
+  while(tiers.length<3) tiers.push({min:"",amt:""});
+  $("tierBox").innerHTML=tiers.map((t,i)=>`<input aria-label="Tier ${i+1} minimum RVOL" class="tmin" inputmode="decimal" value="${esc(t.min)}" placeholder="RVOL"><input aria-label="Tier ${i+1} amount" class="tamt" inputmode="numeric" value="${esc(t.amt)}" placeholder="$">`).join("");
+  $("setKey").value=getApiKey();
+  $("setBoostAfter").value=s.boost.after; $("setBoostAmt").value=s.boost.amt;
+  const m=s.mentor, py=s.pay;
+  const pairs=(tiers,cls,unit)=>{ const t=[...(tiers||[])].sort((a,b)=>a.min-b.min); while(t.length<2) t.push({min:"",amt:""});
+    return t.map((x,i)=>`<input aria-label="${unit} tier ${i+1}" class="${cls}min" inputmode="numeric" value="${esc(x.min)}" placeholder="${unit}"><input aria-label="${unit} tier ${i+1} bonus" class="${cls}amt" inputmode="decimal" value="${esc(x.amt)}" placeholder="$">`).join(""); };
+  $("apptTierBox").innerHTML=pairs(m.apptTiers,"ap","Appointments");
+  $("countTierBox").innerHTML=pairs(m.countTiers,"ct","Sales");
+  $("setBigRvol").value=m.bigRvol; $("setBigAmt").value=m.bigSaleAmt; $("setConfAmt").value=m.confirmAmt; $("setBigConfAmt").value=m.bigConfirmAmt;
+  $("setMentorDay").value=String(py.mentorDay); $("setRegPay").value=py.regPayday||""; $("setRegEnd").value=py.regEnd||"";
+  const tx=s.tax; $("taxFedComm").value=tx.fedComm; $("taxFedMent").value=tx.fedMent; $("taxPreComm").value=tx.preComm; $("taxPreMent").value=tx.preMent;
+  $("taxState").value=tx.state; $("taxSS").value=tx.ss; $("taxMed").value=tx.med; $("taxLocal").value=tx.local;
+  regHint(); taxPreview();
+}
+function readTax(){ const d=DEFAULT_SETTINGS.tax; return {fedComm:numIn("taxFedComm",0), fedMent:numIn("taxFedMent",0), preComm:numIn("taxPreComm",0), preMent:numIn("taxPreMent",0),
+  state:numIn("taxState",0), ss:numIn("taxSS",d.ss), med:numIn("taxMed",d.med), local:numIn("taxLocal",0), v:3}; }
+function taxPreview(){
+  const g=parseFloat(String($("taxTry").value).replace(/[$,]/g,""))||1000, t=readTax(), c=taxesOn(g,0,t), m=taxesOn(0,g,t);
+  $("taxTryOut").textContent="As a commission check: "+cents(c.net)+" take-home ("+cents(c.total)+" taken out). As a mentoring check: "+cents(m.net)+" take-home ("+cents(m.total)+" taken out).";
+}
+["taxFedComm","taxFedMent","taxPreComm","taxPreMent","taxState","taxSS","taxMed","taxLocal","taxTry"].forEach(id=>$(id).addEventListener("input",taxPreview));
+function regHint(){
+  const e=$("setRegEnd").value;
+  $("regHint").textContent=e ? "Each regular check pays the 2 weeks of sales ending that day, like "+nice(addDays(e,-13))+" – "+nice(e)+"." : "Regular commission is paid every 2 weeks and covers 2 weeks of sales.";
+}
+$("setRegPay").addEventListener("change",()=>{
+  const d=$("setRegPay").value;
+  if(d && !$("setRegEnd").value) $("setRegEnd").value=addDays(d,-7);
+  regHint();
+});
+$("setRegEnd").addEventListener("change",regHint);
+function readTiers(cls){
+  const mins=[...document.querySelectorAll("."+cls+"min")].map(i=>parseFloat(i.value));
+  const amts=[...document.querySelectorAll("."+cls+"amt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
+  return mins.map((x,i)=>({min:x,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
+}
+const numIn=(id,fallback)=>{ const v=parseFloat(String($(id).value).replace(/[$,]/g,"")); return isNaN(v)?fallback:v; };
+$("saveSettings").addEventListener("click", async()=>{
+  const mins=[...document.querySelectorAll(".tmin")].map(i=>parseFloat(i.value));
+  const amts=[...document.querySelectorAll(".tamt")].map(i=>parseFloat(String(i.value).replace(/[$,]/g,"")));
+  const tiers=mins.map((m,i)=>({min:m,amt:amts[i]})).filter(t=>!isNaN(t.min)&&!isNaN(t.amt));
+  const terms=$("setTerms").value.split(",").map(x=>x.trim()).filter(Boolean);
+  if(!terms.length){ toast("Add at least one BC name or number."); return; }
+  const regPayday=$("setRegPay").value, regEnd=$("setRegEnd").value;
+  if(!!regPayday !== !!regEnd){ toast("Fill in both regular payday dates, or leave both empty."); return; }
+  const dm=DEFAULT_SETTINGS.mentor;
+  state.settings={ bcTerms:terms, bcLabel:$("setLabel").value.trim()||terms.join(" / "), tiers, weekStart:Number($("setWeek").value),
+    boost:{ after:Math.max(0,parseInt($("setBoostAfter").value,10)||0), amt:numIn("setBoostAmt",0) },
+    mentor:{ apptTiers:readTiers("ap"), countTiers:readTiers("ct"), bigRvol:numIn("setBigRvol",dm.bigRvol), bigSaleAmt:numIn("setBigAmt",0),
+      confirmAmt:numIn("setConfAmt",0), bigConfirmAmt:numIn("setBigConfAmt",0) },
+    pay:{ mentorDay:Number($("setMentorDay").value), regPayday, regEnd }, tax:readTax() };
+  mentorWs=null;
+  await putSettings(); toast(storageOk?"Settings saved.":"Couldn't save settings on this device.");
+  render();
+});
+$("saveKey").addEventListener("click",()=>{
+  const k=$("setKey").value.trim();
+  if(!k){ toast("Paste your API key first."); return; }
+  toast(setApiKey(k)?"Key saved on this device.":"Couldn't save the key on this device.");
+});
+$("clearKey").addEventListener("click",()=>{ setApiKey(""); $("setKey").value=""; toast("Key removed."); });
+
+/* ---------- backup / restore ---------- */
+$("backupBtn").addEventListener("click", async()=>{
+  const data={app:"sales-tracker", version:2, exportedAt:new Date().toISOString(), settings:state.settings, sales:Object.fromEntries(state.sales), mentoring:state.mentoring};
+  const name="sales-tracker-backup-"+todayISO()+".json";
+  const r=await deliverFile(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}), name);
+  if(r==="saved") toast("Backup saved ("+state.sales.size+" sales).");
+});
+$("restoreBtn").addEventListener("click",()=>$("restoreIn").click());
+$("restoreIn").addEventListener("change", async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  let o;
+  try{ o=JSON.parse(await f.text()); }catch(err){ toast("That file isn't a tracker backup."); return; }
+  const incoming=Array.isArray(o.sales)?o.sales:Object.values(o.sales||{});
+  if(!incoming.length && !o.settings && !o.mentoring){ toast("That file isn't a tracker backup."); return; }
+  if(o.mentoring && typeof o.mentoring==="object"){
+    for(const [k,v] of Object.entries(o.mentoring)){ const cur=state.mentoring[k]; if(!cur || (!cur.appts && !cur.extra && !cur.note && (cur.confirms===undefined||cur.confirms==="") && (cur.sales===undefined||cur.sales===""))) state.mentoring[k]=v; }
+  }
+  let added=0, updated=0;
+  for(const s of incoming){
+    if(!s || !s.pn || !s.saleDate) continue;
+    const id=safeId(s.pn); const old=state.sales.get(id);
+    if(old && (old.updatedAt||"")>=(s.updatedAt||"")) continue;
+    state.sales.set(id, Object.assign({}, s, {id}));
+    old?updated++:added++;
+  }
+  if(o.settings && confirm("Also use the settings from this backup (BC name, tiers, week start)?")){
+    state.settings=mergeSettings(o.settings); fillSettings();
+  }
+  saveLocal(); render();
+  toast("Restored: "+added+" added, "+updated+" updated.");
+});
+
+/* ---------- save a file (share sheet on phones, download elsewhere) ---------- */
+async function deliverFile(blob, name){
+  const file=new File([blob], name, {type:blob.type});
+  const touch=window.matchMedia && matchMedia("(pointer:coarse)").matches;
+  if(touch && navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:name}); return "saved"; }
+    catch(e){ if(e && e.name==="AbortError") return "declined"; }
+  }
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=name; document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+  return "saved";
+}
+
+/* ---------- range controls ---------- */
+function setMode(m){
+  state.mode=m;
+  for(const [id,v] of [["modeWeek","week"],["modeCustom","custom"],["modeAll","all"]]) $(id).setAttribute("aria-pressed", String(m===v));
+  $("customBox").classList.toggle("on", m==="custom");
+  if(m==="custom" && !state.from){ const [a,b]=weekBounds(state.weekAnchor); state.from=a; state.to=b; $("fromDate").value=a; $("toDate").value=b; }
+  render();
+}
+$("modeWeek").onclick=()=>setMode("week");
+$("modeCustom").onclick=()=>setMode("custom");
+$("modeAll").onclick=()=>setMode("all");
+$("prevWk").onclick=()=>{ state.weekAnchor=addDays(state.weekAnchor,-7); render(); };
+$("nextWk").onclick=()=>{ state.weekAnchor=addDays(state.weekAnchor,7); render(); };
+$("fromDate").onchange=e=>{ state.from=e.target.value||null; render(); };
+$("toDate").onchange=e=>{ state.to=e.target.value||null; render(); };
+
+/* ---------- edit dialog ---------- */
+const dlg=$("dlg");
+function openEdit(id){
+  const s=id?state.sales.get(id):{saleDate:todayISO(),pn:"",rvol:"",fee:"",par:"",rep:"",runDate:"",apptDate:"",company:"",takenBy:"",bc:state.settings.bcLabel,note:"",c44:true};
+  if(!s) return;
+  state.editingId=id||null;
+  $("dlgTitle").textContent=id?"Edit sale":"Add a sale";
+  $("dlgDelete").style.display=id?"":"none";
+  $("fSale").value=s.saleDate; $("fPn").value=s.pn; $("fRvol").value=s.rvol; $("fFee").value=s.fee;
+  $("fPar").value=s.par||""; $("fRep").value=s.rep||""; $("fRun").value=s.runDate||""; $("fAppt").value=s.apptDate||"";
+  $("fCo").value=s.company||""; $("fTaken").value=s.takenBy||""; $("fBc").value=s.bc||""; $("fNote").value=s.note||"";
+  $("f44").checked=!!s.c44; $("fConf").checked=!!s.confirmed;
+  dlg.showModal();
+}
+document.addEventListener("click",e=>{
+  const cf=e.target.closest("[data-conf]");
+  if(cf){ const s=state.sales.get(cf.dataset.conf); if(s){ putSale(Object.assign({},s,{confirmed:!s.confirmed})); render(); toast(s.confirmed?"Marked not confirmed.":"Marked confirmed."); } return; }
+  const el=e.target.closest("[data-id]"); if(el && (el.closest("#cards")||el.closest("#tableWrap"))) openEdit(el.dataset.id);
+});
+$("addBtn").onclick=()=>openEdit(null);
+$("editForm").addEventListener("submit", async e=>{
+  const action=e.submitter?.value;
+  if(action==="cancel") return;
+  if(action==="delete"){
+    if(state.editingId){ await removeSale(state.editingId); toast("Sale deleted."); render(); }
+    return;
+  }
+  const rv=parseFloat($("fRvol").value);
+  const sale={
+    saleDate:$("fSale").value, pn:$("fPn").value.trim(), rvol:isNaN(rv)?$("fRvol").value.trim():rv.toFixed(1),
+    fee:Number(String($("fFee").value).replace(/[$,]/g,""))||0, par:$("fPar").value.trim(), rep:$("fRep").value.trim(),
+    runDate:mdy($("fRun").value), apptDate:mdy($("fAppt").value), company:$("fCo").value.trim(), takenBy:$("fTaken").value.trim(),
+    bc:$("fBc").value.trim(), note:$("fNote").value.trim(), c44:$("f44").checked, confirmed:$("fConf").checked, source:"edited by hand"
+  };
+  if(state.editingId && safeId(sale.pn)!==state.editingId) await removeSale(state.editingId);
+  await putSale(sale); toast(storageOk?"Sale saved.":"Couldn't save on this device.");
+  render();
+});
+
+/* ---------- PDF reading ---------- */
+let pdfReady=false;
+function pdfLib(){
+  const lib=window.pdfjsLib;
+  if(!lib) throw new Error("The PDF reader didn't load. Reload the app and try again.");
+  if(!pdfReady){ lib.GlobalWorkerOptions.workerSrc="vendor/pdf.worker.min.js"; pdfReady=true; }
+  return lib;
+}
+
+function groupRows(items){
+  const rows=[];
+  for(const it of items){
+    let r=rows.find(r=>Math.abs(r.y-it.y)<2.5);
+    if(!r){ r={y:it.y,h:0,items:[]}; rows.push(r); }
+    r.items.push(it); r.h=Math.max(r.h,it.h);
+  }
+  for(const r of rows){ r.items.sort((a,b)=>a.x-b.x); r.text=r.items.map(i=>i.s).join(" "); r.marked=r.items.map(i=>"["+Math.round(i.x)+"]"+i.s).join(" "); }
+  rows.sort((a,b)=>b.y-a.y);
+  return rows;
+}
+
+async function readPdf(file){
+  const lib=pdfLib();
+  const pdf=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const terms=state.settings.bcTerms.map(t=>t.toLowerCase()).filter(Boolean);
+  let saleDate=null, header=null; const found=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const items=tc.items.filter(i=>i.str && i.str.trim()).map(i=>({x:i.transform[4],y:i.transform[5],w:i.width,h:i.height||Math.abs(i.transform[3])||8,s:i.str.trim()}));
+    const rows=groupRows(items);
+    if(!saleDate){
+      for(const r of rows){ const m=r.text.match(/Sales\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m){ saleDate=mdyToISO(m[1]); break; } }
+    }
+    const hdr=rows.find(r=>/RVOL/i.test(r.text) && /Company/i.test(r.text));
+    if(!hdr) continue;
+    if(!header) header=hdr.marked;
+    const h44=hdr.items.find(i=>i.s==="44");
+    const matched=rows.filter(r=>r.y<hdr.y-1 && terms.some(t=>r.text.toLowerCase().includes(t)));
+    if(!matched.length) continue;
+    let ctx=null, vp=null;
+    if(h44){
+      vp=page.getViewport({scale:2});
+      const canvas=document.createElement("canvas"); canvas.width=Math.ceil(vp.width); canvas.height=Math.ceil(vp.height);
+      ctx=canvas.getContext("2d",{willReadFrequently:true}); ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+      await page.render({canvasContext:ctx, viewport:vp, canvas}).promise;
+    }
+    for(const r of matched){
+      let c44=null;
+      if(ctx){
+        const cx=h44.x+h44.w/2, cy=r.y+r.h*0.3;
+        const [px,py]=vp.convertToViewportPoint(cx,cy);
+        const half=5, img=ctx.getImageData(Math.round(px-half),Math.round(py-half),half*2+1,half*2+1).data;
+        let dark=0,tot=0; for(let k=0;k<img.length;k+=4){ tot++; if((img[k]*.299+img[k+1]*.587+img[k+2]*.114)<128) dark++; }
+        c44=dark/tot>0.1;
+      }
+      found.push({marked:r.marked, c44});
+    }
+  }
+  return {saleDate, header, rows:found};
+}
+
+function buildPrompt(header, rows){
+  return `You are reading rows from a printed sales report so they can be logged. Below is the report's header row and some data rows. Each text fragment is prefixed with its x position in points, like [342]Red Elk Construction. Some reports merge neighbouring columns into one fragment (for example "[281]10/06/26 Craftsman Plumbi" holds Run Date and Company, and "[385]1,300 Jacobson, Jor" holds Fee and Taken By), so split fragments by meaning, using the header's column order and x positions as a guide.
+
+Header:
+${header}
+
+Rows:
+${rows.map((r,i)=>"#"+i+": "+r.marked).join("\n")}
+
+For every row return an object with:
+- "i": the row number after #
+- "pn": the PN-Appt value (for example 218265849-1). A small row counter before it (like "39 ") is not part of it.
+- "rvol": RVOL as printed, one decimal (for example "1.0")
+- "par": the Par name, or "" when empty. Par sits between RVOL and Sales Rep; if two names appear in that span, the first is Par and the second is the Sales Rep.
+- "rep": the Sales Rep name as printed
+- "run_date": Run Date as MM/DD/YY
+- "company": Company as printed (it may be cut off; keep it as printed)
+- "fee": Fee as a number, without commas
+- "taken_by": the Taken By name, or "" when blank. Taken By, Confirmer and Sales Senex are name columns right after Fee, in that order. If two or three names appear there, the first is Taken By. If only one name appears, it is the Confirmer and Taken By is "".
+- "appt_date": Appt Date as MM/DD/YY
+- "bc": the BC value as printed (a name or a number)
+
+Copy names and companies exactly as printed.`;
+}
+
+const ROWS_SCHEMA = {
+  type:"object", additionalProperties:false, required:["rows"],
+  properties:{ rows:{ type:"array", items:{
+    type:"object", additionalProperties:false,
+    required:["i","pn","rvol","par","rep","run_date","company","fee","taken_by","appt_date","bc"],
+    properties:{
+      i:{type:"integer"}, pn:{type:"string"}, rvol:{type:"string"}, par:{type:"string"}, rep:{type:"string"},
+      run_date:{type:"string"}, company:{type:"string"}, fee:{type:"number"}, taken_by:{type:"string"},
+      appt_date:{type:"string"}, bc:{type:"string"}
+    }
+  }}}
+};
+
+class ReadError extends Error {}
+
+async function readRowsWithClaude(prompt){
+  const key=getApiKey();
+  if(!key) throw new ReadError("Add your Anthropic API key in Settings to read logs.");
+  if(!window.Anthropic) throw new ReadError("The log reader didn't load. Reload the app and try again.");
+  const A=window.Anthropic;
+  const client=new A({apiKey:key, dangerouslyAllowBrowser:true});
+  const base={
+    model:MODEL, max_tokens:16000,
+    output_config:{effort:"medium", format:{type:"json_schema", schema:ROWS_SCHEMA}},
+    messages:[{role:"user", content:prompt}]
+  };
+  let res;
+  try{
+    try{
+      // If a safety check declines the request, let the API retry it on a fallback model.
+      res=await client.beta.messages.create({...base, betas:["server-side-fallback-2026-07-01"], fallbacks:"default"});
+    }catch(e){
+      if(!(e instanceof A.BadRequestError)) throw e;
+      res=await client.messages.create(base);
+    }
+  }catch(e){
+    if(e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError) throw new ReadError("Your API key was rejected. Check it in Settings.");
+    if(e instanceof A.RateLimitError) throw new ReadError("Too many logs at once. Wait a minute, then upload this one again.");
+    if(e instanceof A.APIConnectionError) throw new ReadError("No connection. Reading logs needs the internet; try again when you're online.");
+    if(e instanceof A.APIError) throw new ReadError("Couldn't read this log ("+(e.status||"error")+": "+e.message+"). Try uploading it again.");
+    throw e;
+  }
+  if(res.stop_reason==="refusal") throw new ReadError("Claude declined to read this log. Add the sales by hand.");
+  if(res.stop_reason==="max_tokens") throw new ReadError("This log has too many of your sales to read at once. Split the PDF and upload the parts.");
+  const text=res.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+  try{ return JSON.parse(text); }
+  catch(e){ throw new ReadError("Claude's answer couldn't be understood. Try uploading the log again."); }
+}
+
+async function extract(file){
+  if(!state.settings.bcTerms.length) return {file:file.name, error:"Add your BC name or number in Settings first, so the tracker knows which sales are yours."};
+  const parsed=await readPdf(file);
+  if(!parsed.header) return {file:file.name, error:"This doesn't look like a sales listing. No table header was found."};
+  if(!parsed.rows.length) return {file:file.name, added:0, updated:0, same:0, none:true, saleDate:parsed.saleDate};
+  let out;
+  try{ out=await readRowsWithClaude(buildPrompt(parsed.header, parsed.rows)); }
+  catch(e){ if(e instanceof ReadError) return {file:file.name, error:e.message}; throw e; }
+  const rows=Array.isArray(out?.rows)?out.rows:[];
+  const terms=state.settings.bcTerms.map(t=>t.toLowerCase());
+  const saleDate=parsed.saleDate||todayISO();
+  let added=0, updated=0, same=0; const skipped=[];
+  for(const r of rows){
+    const src=parsed.rows[r.i]; if(!src || !r.pn) continue;
+    if(r.bc && !terms.some(t=>String(r.bc).toLowerCase().includes(t))){ skipped.push(r.pn); continue; }
+    const rv=parseFloat(r.rvol);
+    const sale={
+      saleDate, pn:String(r.pn).trim(), rvol:isNaN(rv)?String(r.rvol||""):rv.toFixed(1),
+      fee:Number(String(r.fee??0).replace(/[$,]/g,""))||0, par:(r.par||"").trim(), rep:(r.rep||"").trim(),
+      runDate:mdy(r.run_date), apptDate:mdy(r.appt_date), company:(r.company||"").trim(), takenBy:(r.taken_by||"").trim(),
+      bc:state.settings.bcLabel, c44:src.c44===null?false:src.c44, note:src.c44===null?"Check 44":"", source:file.name
+    };
+    if(!parsed.saleDate) sale.note=(sale.note?sale.note+"; ":"")+"Sale date not found in log";
+    const id=safeId(sale.pn); const old=state.sales.get(id);
+    sale.confirmed=!!(old && old.confirmed);
+    if(old){
+      if(old.saleDate>sale.saleDate){ same++; continue; }   // keep the newer report's version
+      if(old.saleDate<sale.saleDate) sale.note=[sale.note,"Also on "+short(old.saleDate)+" log"].filter(Boolean).join("; ");
+      const keys=["saleDate","rvol","fee","par","rep","runDate","apptDate","company","takenBy","c44"];
+      if(keys.every(k=>String(old[k])===String(sale[k]))){ same++; continue; }
+      await putSale(sale); updated++;
+    }else{ await putSale(sale); added++; }
+  }
+  return {file:file.name, added, updated, same, saleDate, skipped};
+}
+
+async function handleFiles(files){
+  files=[...files].filter(f=>/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name));
+  if(!files.length){ toast("Choose PDF sales logs."); return; }
+  $("log").innerHTML=""; let latest=null;
+  for(const f of files){
+    const li=document.createElement("li"); li.innerHTML=`<span class="f">${esc(f.name)}</span>: reading…`; $("log").append(li);
+    let res;
+    try{ res=await extract(f); }catch(e){ res={file:f.name,error:(e&&e.message)||"Couldn't open this PDF."}; }
+    if(res.error){ li.className="err"; li.innerHTML=`<span class="f">${esc(f.name)}</span>: ${esc(res.error)}`; continue; }
+    const when=res.saleDate?" ("+short(res.saleDate)+" sales)":"";
+    if(res.none){ li.innerHTML=`<span class="f">${esc(f.name)}</span>${when}: none of your sales are on this log.`; continue; }
+    const parts=[]; if(res.added) parts.push(res.added+" added"); if(res.updated) parts.push(res.updated+" updated"); if(res.same) parts.push(res.same+" already saved");
+    li.innerHTML=`<span class="f">${esc(f.name)}</span>${when}: ${parts.join(", ")||"nothing new"}.`;
+    if(res.saleDate && (!latest || res.saleDate>latest)) latest=res.saleDate;
+    if(latest && state.mode==="week") state.weekAnchor=latest;
+    render();
+  }
+  $("fileIn").value="";
+}
+$("fileIn").addEventListener("change",e=>handleFiles(e.target.files));
+const drop=$("drop");
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>handleFiles(e.dataTransfer.files));
+
+/* ---------- report (PDF + print) ---------- */
+function reportData(){
+  const list=salesInRange(); const [a,b]=currentRange();
+  const dates=list.map(s=>s.saleDate);
+  const from=state.mode==="all"?dates[0]:a, to=state.mode==="all"?dates[dates.length-1]:b;
+  return {list, from, to};
+}
+function rowCells(s, showDate){
+  const c=saleComm(s);
+  return [showDate?short(s.saleDate):"", s.rvol, s.par||"", s.rep||"", s.runDate||"", (s.company||"")+(s.note?" *":""), Number(s.fee||0).toLocaleString("en-US"), s.takenBy||"", s.c44?"X":"", s.apptDate||"", s.bc||"", c==null?"$0 **":money(c)+(isBoosted(s)?" †":"")];
+}
+const HEAD=["Sale Date","RVOL","Par","Sales Rep","Run Date","Company","Fee","Taken By","44","Appt Date","BC","Commission"];
+
+async function makePdf(){
+  const {PDFDocument, StandardFonts, rgb}=window.PDFLib;
+  const {list, from, to}=reportData();
+  const doc=await PDFDocument.create();
+  const font=await doc.embedFont(StandardFonts.Helvetica), bold=await doc.embedFont(StandardFonts.HelveticaBold);
+  const W=792,H=612,M=29;
+  const widths=[54,32,26,80,52,118,40,66,20,54,108,62]; const total=widths.reduce((a,b)=>a+b,0);
+  const scale=(W-2*M)/total; const cw=widths.map(w=>w*scale);
+  const align=["l","c","l","l","l","l","r","l","c","l","l","r"];
+  const navy=rgb(.122,.231,.4), grid=rgb(.72,.76,.82), band=rgb(.933,.949,.973), totalBg=rgb(.85,.88,.93);
+  const fs=8, rh=17;
+  let page, y;
+  const fit=(t,f,w)=>{ t=String(t); if(f.widthOfTextAtSize(t,fs)<=w) return t; while(t.length>1 && f.widthOfTextAtSize(t+"…",fs)>w) t=t.slice(0,-1); return t+"…"; };
+  function drawRow(cells,{f=font,bg=null,color=rgb(0,0,0),topRule=false}={}){
+    if(bg) page.drawRectangle({x:M,y:y-rh,width:W-2*M,height:rh,color:bg});
+    let x=M;
+    cells.forEach((c,i)=>{
+      const txt=fit(c,f,cw[i]-6); const tw=f.widthOfTextAtSize(txt,fs);
+      const tx=align[i]==="r"?x+cw[i]-3-tw:align[i]==="c"?x+(cw[i]-tw)/2:x+3;
+      page.drawText(txt,{x:tx,y:y-rh+5.5,size:fs,font:f,color});
+      page.drawRectangle({x,y:y-rh,width:cw[i],height:rh,borderColor:grid,borderWidth:.4});
+      x+=cw[i];
+    });
+    if(topRule) page.drawLine({start:{x:M,y},end:{x:W-M,y},thickness:1,color:navy});
+    y-=rh;
+  }
+  function newPage(first){
+    page=doc.addPage([W,H]); y=H-M;
+    if(first){
+      const title="My Sales – BC "+state.settings.bcLabel; const tw=bold.widthOfTextAtSize(title,17);
+      page.drawText(title,{x:(W-tw)/2,y:y-14,size:17,font:bold,color:navy});
+      const sub="Sales dates "+short(from)+" – "+short(to); const sw=font.widthOfTextAtSize(sub,9.5);
+      page.drawText(sub,{x:(W-sw)/2,y:y-30,size:9.5,font,color:rgb(.45,.45,.45)});
+      y-=44;
+    }
+    drawRow(HEAD,{f:bold,bg:navy,color:rgb(1,1,1)});
+  }
+  newPage(true);
+  let prev=null, tc=0,tr=0,tf=0, n=0, flagged=false, noted=[];
+  list.forEach(s=>{
+    if(y-rh<M+40) newPage(false);
+    const nd=s.saleDate!==prev; prev=s.saleDate;
+    const c=saleComm(s); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0;
+    if(s.note) noted.push(s);
+    drawRow(rowCells(s,nd),{bg:(n++%2)?band:null,topRule:nd&&n>1});
+  });
+  if(y-rh<M+40) newPage(false);
+  drawRow(["TOTAL",tr.toFixed(1),"",list.length+" sales","","",tf.toLocaleString("en-US"),"",String(list.filter(s=>s.c44).length),"","",money(tc)],{f:bold,bg:totalBg});
+  const notes=["44 column: X = checked.", "Commission: "+[...state.settings.tiers].sort((a,b)=>a.min-b.min).map(t=>"RVOL "+t.min+"+ = "+money(t.amt)).join("  |  ")+"."];
+  if(flagged) notes.push("** RVOL below the lowest tier earns $0.");
+  if(list.some(isBoosted)) notes.push("† "+ordinal(Number(state.settings.boost.after)+1)+" or later sale in its week: a 1 mill sale pays "+money(state.settings.boost.amt)+".");
+  noted.forEach(s=>notes.push("* "+s.company+" ("+s.pn+"): "+s.note+"."));
+  y-=12;
+  for(const t of notes){ if(y<M){ page=doc.addPage([W,H]); y=H-M; } page.drawText(fit(t,font,W-2*M),{x:M,y,size:7.5,font,color:rgb(.27,.27,.27)}); y-=10; }
+  return {bytes:await doc.save(), name:"My_Sales_"+short(from).replace(/\//g,"-")+"_to_"+short(to).replace(/\//g,"-")+".pdf"};
+}
+
+$("savePdf").addEventListener("click", async()=>{
+  if(!window.PDFLib){ toast("The PDF maker didn't load. Use Print instead."); return; }
+  $("savePdf").disabled=true;
+  try{
+    const {bytes,name}=await makePdf();
+    const r=await deliverFile(new Blob([bytes],{type:"application/pdf"}), name);
+    if(r==="saved") toast("PDF ready.");
+  }catch(e){ toast("Couldn't build the PDF. Use Print instead."); }
+  $("savePdf").disabled=false;
+});
+
+function doPrint(){
+  const {list,from,to}=reportData();
+  let prev=null, tc=0,tr=0,tf=0, flagged=false, noted=[];
+  const body=list.map(s=>{ const nd=s.saleDate!==prev; prev=s.saleDate; const c=saleComm(s); if(c==null) flagged=true; tc+=c||0; tr+=parseFloat(s.rvol)||0; tf+=Number(s.fee)||0; if(s.note) noted.push(s);
+    return "<tr>"+rowCells(s,nd).map(x=>"<td>"+esc(x)+"</td>").join("")+"</tr>"; }).join("");
+  const foot=`<tr><td><b>TOTAL</b></td><td><b>${tr.toFixed(1)}</b></td><td></td><td><b>${list.length} sales</b></td><td></td><td></td><td><b>${tf.toLocaleString()}</b></td><td></td><td><b>${list.filter(s=>s.c44).length}</b></td><td></td><td></td><td><b>${money(tc)}</b></td></tr>`;
+  $("printArea").innerHTML=`<h1>My Sales – BC ${esc(state.settings.bcLabel)}</h1><p>Sales dates ${short(from)} – ${short(to)}</p>
+    <table><thead><tr>${HEAD.map(h=>"<th>"+h+"</th>").join("")}</tr></thead><tbody>${body}${foot}</tbody></table>
+    <div class="foot">44 column: X = checked.${flagged?"<br>** RVOL below the lowest tier earns $0.":""}${list.some(isBoosted)?"<br>† "+ordinal(Number(state.settings.boost.after)+1)+" or later sale in its week: a 1 mill sale pays "+money(state.settings.boost.amt)+".":""}${noted.map(s=>"<br>* "+esc(s.company)+" ("+esc(s.pn)+"): "+esc(s.note)+".").join("")}</div>`;
+  window.print();
+}
+$("printBtn").addEventListener("click", doPrint);
+
+/* ---------- colors ---------- */
+const THEMES = {
+  navy:     {name:"Navy & gold"},
+  ocean:    {name:"Ocean",    brand:"#0B63B6", accent:"#2BB3C0", darkBrand:"#8CC2F5"},
+  forest:   {name:"Forest",   brand:"#1F6B45", accent:"#8BC34A", darkBrand:"#8FD3AE"},
+  berry:    {name:"Berry",    brand:"#6B2FA8", accent:"#E05BA8", darkBrand:"#C6A2F0"},
+  rose:     {name:"Rose",     brand:"#B0305A", accent:"#F4A3B8", darkBrand:"#F29BB6"},
+  sunset:   {name:"Sunset",   brand:"#B4470F", accent:"#F5A623", darkBrand:"#F7B27A"},
+  charcoal: {name:"Charcoal", brand:"#2F3338", accent:"#9AA4AE", darkBrand:"#D5D9DE"}
+};
+const LOOK_KEY="salesTracker.look";
+let look={color:"navy", custom:"#0B63B6", mode:"auto"};
+try{ Object.assign(look, JSON.parse(localStorage.getItem(LOOK_KEY)||"{}")); }catch(e){}
+function hexRgb(h){ h=String(h).replace("#",""); if(h.length===3) h=h.split("").map(c=>c+c).join(""); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgbHex(r,g,b){ return "#"+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join(""); }
+function mix(h,with_,t){ const a=hexRgb(h), b=hexRgb(with_); return rgbHex(a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t); }
+function lum(h){ const c=hexRgb(h).map(v=>{ v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4); }); return .2126*c[0]+.7152*c[1]+.0722*c[2]; }
+const inkOn = h => lum(h)>.32 ? "#10151F" : "#FFFFFF";
+function isDark(){
+  if(look.mode==="dark") return true; if(look.mode==="light") return false;
+  return !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function themeVars(){
+  if(look.color==="custom"){
+    const c=look.custom||"#0B63B6";
+    return {brand:c, darkBrand:lum(c)<.25?mix(c,"#FFFFFF",.5):c, accent:c};
+  }
+  return THEMES[look.color]||THEMES.navy;
+}
+function applyLook(){
+  const root=document.documentElement, t=themeVars(), dark=isDark();
+  if(look.mode==="auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme",look.mode);
+  for(const k of ["--brand","--brand-ink","--gold","--gold-ink","--paper","--row"]) root.style.removeProperty(k);
+  if(t.brand){
+    const b=dark?t.darkBrand:t.brand;
+    root.style.setProperty("--paper", dark?mix("#0E1524",t.brand,.14):mix("#EEF1F4",t.brand,.10));
+    root.style.setProperty("--row", dark?mix("#1B2843",t.brand,.12):mix("#F6F8FA",t.brand,.06));
+    root.style.setProperty("--brand",b); root.style.setProperty("--brand-ink",inkOn(b));
+    root.style.setProperty("--gold",t.accent); root.style.setProperty("--gold-ink",inkOn(t.accent));
+  }
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute("content", t.brand ? (dark?mix(t.darkBrand,"#0E1524",.75):t.brand) : (dark?"#0E1524":"#15233F"));
+  $("swatches").querySelectorAll("[data-color]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.color===look.color)));
+  document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mode===look.mode)));
+}
+function saveLook(){ try{ localStorage.setItem(LOOK_KEY, JSON.stringify(look)); }catch(e){} applyLook(); }
+$("swatches").innerHTML=Object.entries(THEMES).map(([k,t])=>`<button class="swatch" data-color="${k}" title="${t.name}" aria-label="${t.name}" style="--a:${t.brand||"#15233F"};--b:${t.accent||"#F0B429"}"></button>`).join("")
+  +`<label class="swatch custom" data-color="custom" title="Pick any color" aria-label="Pick any color"><input type="color" id="customColor" aria-label="Pick any color"></label>`;
+$("customColor").value=look.custom||"#0B63B6";
+$("swatches").addEventListener("click",e=>{ const b=e.target.closest("button[data-color]"); if(!b) return; look.color=b.dataset.color; saveLook(); });
+$("customColor").addEventListener("input",e=>{ look.color="custom"; look.custom=e.target.value; saveLook(); });
+document.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>{ look.mode=b.dataset.mode; saveLook(); }));
+if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ if(look.mode==="auto") applyLook(); });
+applyLook();
+
+/* ---------- install / offline ---------- */
+let installEvt=null;
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; $("installBanner").hidden=false; });
+$("installBtn").addEventListener("click", async()=>{
+  if(!installEvt) return; installEvt.prompt();
+  try{ await installEvt.userChoice; }catch(e){}
+  installEvt=null; $("installBanner").hidden=true;
+});
+window.addEventListener("appinstalled",()=>{ $("installBanner").hidden=true; });
+const standalone=(window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+if(/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone) $("iosHint").hidden=false;
+if("serviceWorker" in navigator && location.protocol!=="file:"){
+  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{}); });
+  // When a new version of the app takes over, reload once so it shows right away.
+  const hadController=!!navigator.serviceWorker.controller; let reloaded=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(hadController && !reloaded && !lock){ reloaded=true; location.reload(); } });
+}
+try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+
+/* ---------- password lock ---------- */
+function updateLockUI(){
+  $("lockStatus").textContent=lock?"On. This device asks for your password to open the tracker.":"Off. Anyone using this device can open the tracker.";
+  $("lockPwLabel").textContent=lock?"New password":"Choose a password";
+  $("lockSet").textContent=lock?"Change password":"Turn on password";
+  $("lockNow").hidden=$("lockOff").hidden=!lock;
+}
+function unlockFlow(e){
+  return new Promise(resolve=>{
+    document.body.classList.add("locked"); $("lock").hidden=false; setTimeout(()=>$("lockIn").focus(),50);
+    if(!window.crypto || !crypto.subtle) $("lockErr").textContent="This browser can't open a locked tracker. Use the https:// link.";
+    $("lockForm").onsubmit=async ev=>{
+      ev.preventDefault(); $("lockErr").textContent=""; $("lockBtn").disabled=true; $("lockBtn").textContent="Unlocking…";
+      try{
+        const salt=fromB64(e.salt), key=await deriveKey($("lockIn").value,salt), o=await decryptObj(key,e);
+        lock={key,salt}; applyData(o);
+        $("lockIn").value=""; $("lock").hidden=true; document.body.classList.remove("locked");
+        resolve();
+      }catch(err){ $("lockErr").textContent="That password isn't right. Try again."; $("lockIn").select(); }
+      $("lockBtn").disabled=false; $("lockBtn").textContent="Unlock";
+    };
+  });
+}
+$("lockForgot").addEventListener("click",()=>{
+  if(!confirm("Without the password, the sales saved on this device can't be opened.\n\nErase everything saved on this device and start over? You can then restore a backup if you have one.")) return;
+  try{ localStorage.removeItem(LS_KEY); localStorage.removeItem(KEY_KEY); }catch(e){}
+  location.reload();
+});
+$("lockSet").addEventListener("click", async()=>{
+  const a=$("lockPw").value, b=$("lockPw2").value;
+  if(a.length<4){ toast("Use at least 4 characters."); return; }
+  if(a!==b){ toast("The two passwords don't match."); return; }
+  if(!window.crypto || !crypto.subtle){ toast("This browser can't set a password here."); return; }
+  const wasOn=!!lock;
+  if(!wasOn) state.apiKey=getApiKey();
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  lock={key:await deriveKey(a,salt), salt};
+  saveLocal(); await saveChain;
+  if(!storageOk){ toast("Couldn't save on this device."); return; }
+  if(!wasOn){ try{ localStorage.removeItem(KEY_KEY); }catch(e){} }
+  $("lockPw").value=$("lockPw2").value="";
+  updateLockUI(); toast(wasOn?"Password changed.":"Password is on.");
+});
+$("lockNow").addEventListener("click", async()=>{ await saveChain; location.reload(); });
+$("lockOff").addEventListener("click", async()=>{
+  const pw=prompt("Enter your password to turn it off:"); if(pw==null) return;
+  await saveChain;
+  try{ const e=readRaw().enc; await decryptObj(await deriveKey(pw,fromB64(e.salt)),e); }
+  catch(err){ toast("That password isn't right."); return; }
+  const api=state.apiKey||""; lock=null; saveLocal(); setApiKey(api); delete state.apiKey;
+  updateLockUI(); toast("Password turned off.");
+});
+let hiddenAt=0;
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){ hiddenAt=Date.now(); return; }
+  if(lock && hiddenAt && Date.now()-hiddenAt>5*60*1000) saveChain.then(()=>location.reload());
+});
+
+/* ---------- start ---------- */
+(async()=>{
+  const raw=readRaw();
+  if(raw && raw.enc) await unlockFlow(raw.enc); else applyData(raw);
+  fillSettings(); showStoreNote(); updateLockUI(); render();
+  if(!state.settings.bcTerms.length) $("settings").open=true;
+})();
+})();
+</script>
+</body>
+</html>
