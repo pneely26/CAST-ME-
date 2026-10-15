@@ -6,14 +6,15 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   await requireUser();
-  const [unreadAlerts, openBlindSpots, newFindings] = await Promise.all([
+  const [unreadAlerts, openBlindSpots, newFindings, newEmails] = await Promise.all([
     prisma.alert.count({ where: { readAt: null } }),
     prisma.blindSpot.count({ where: { reviewStatus: "UNREVIEWED", classification: { in: ["AGENCY_REPORTED_NOT_FOUND", "NEEDS_REVIEW"] } } }),
     prisma.webFinding.count({ where: { status: "NEW" } }),
+    prisma.emailMessage.count({ where: { status: "NEW" } }),
   ]);
   return (
     <div className="min-h-screen">
-      <Nav unreadAlerts={unreadAlerts} openBlindSpots={openBlindSpots} newFindings={newFindings} />
+      <Nav unreadAlerts={unreadAlerts} openBlindSpots={openBlindSpots} newFindings={newFindings} newEmails={newEmails} />
       <div className="lg:pl-60">
         <header className="sticky top-0 z-10 hidden border-b border-line bg-paper/90 backdrop-blur lg:block">
           <form action="/search" className="mx-auto flex max-w-7xl items-center gap-2 px-6 py-3">

@@ -92,6 +92,32 @@ Sample files are in `public/samples/` and linked from the Imports page. All of t
 
 You can also add everything by hand: **New breakdown** (Opportunities), **New agency submission**, **New project**, **New casting director**, and **Add watchlist item**.
 
+## Finding auditions: three ways in
+
+### 1. Paste a listing (no setup)
+**Paste a Listing** in the sidebar: copy a breakdown you're looking at (for example on Actors Access, while signed in as yourself), a casting notice, or an email, and paste it in. **Read it** fills in the project, production type, platform, casting director and office, union, region and deadline, plus every role with its stated age, gender, ethnicity and role type. Check the fields, untick roles you don't want, name the source, and save. Each role becomes an opportunity with a relevance rating.
+Switch to **Agency submission** to paste your agent's email ("we submitted you for HARBOR LIGHTS – Nora Vance"). It's saved as an agency submission and checked for blind spots right away.
+Nothing is guessed: blank fields mean the text didn't say. Ethnicity is only filled in when the listing states it.
+
+### 2. Web-wide search
+On **Web Monitor → Search the whole web**:
+- **Set up region searches** (one click) adds a free Google News casting feed for each of your target markets in Settings. If a search API key is configured, it also adds two web searches per city (e.g. `"now casting" "Chicago"`, `"casting call" "Chicago" actors`). These are checked every 12 hours.
+- **Add a custom web search** with any query and region.
+- Search needs your own API key in `.env`: `BRAVE_SEARCH_API_KEY` (Brave Search API, free plan available), or `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` (Google Programmable Search). The free news feeds work without a key.
+- Results show what the search engine returns (title, link, snippet), filtered by your region and excluded words, in the same findings inbox. The app doesn't open result pages, so results can point to any site the search engine indexes.
+
+### 3. Email inbox
+Put casting emails (casting newsletters, notices, your agent's submission emails) in one mail folder or Gmail label, e.g. **Casting**. Then add to `.env`:
+```
+IMAP_HOST="imap.gmail.com"
+IMAP_PORT=993
+IMAP_USER="you@gmail.com"
+IMAP_PASSWORD="app password"     # Google Account → Security → App passwords (needs 2-Step Verification)
+IMAP_FOLDER="Casting"
+AGENT_EMAILS="youragency.com"    # emails from these addresses/domains are treated as agency submissions
+```
+**Email Inbox** (or `npm run monitor`) reads the newest emails in that folder **read-only**. It never deletes, moves, sends or marks anything as read. Each email becomes a draft: **Review & save** opens it in the paste form with the fields filled in. You can switch an email between "casting notice" and "agency submission", or dismiss it. The app password is only stored in your `.env` and you can revoke it any time. iCloud uses `imap.mail.me.com`; Outlook uses `outlook.office365.com`.
+
 ## Web Monitor (automatic checking of public pages)
 
 **Web Monitor** in the sidebar automatically checks public casting pages and feeds that you choose, filtered by **region** and **keywords**, and collects new listings in a findings inbox.

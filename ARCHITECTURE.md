@@ -131,6 +131,17 @@ interface SourceAdapter<TRaw, TNormalized, TSaveOptions> {
   - `runWebSources()` is called from `runMonitor()`.
   - `acceptFinding()` turns a finding into a `PublicBreakdown` with `verifiedAt=null` and the original URL as its source. It then recomputes relevance and re-runs blind-spot detection.
 
+## Paste parser, web search and email inbox
+
+- **`lib/listing/parse.ts`** handles pasted text.
+  - `parseListingText(text, {subject})` reads `Label: value` header lines through an alias table (Network, Casting Director, Location, Submissions Due, …) and role blocks (`[ROLE NAME] Female, 28-35…`, ALL-CAPS names followed by gender/age, or `Role:` labels). For each role it extracts the stated age, gender, ethnicity and role type.
+  - Dates are parsed loosely ("Oct 22", "10/30", "Friday, October 30th"). A deadline must be labelled.
+  - The project title comes from, in order: a label, a quoted title, the email subject, then a title-like first line (not greetings or sentences). `projectFrom` records which.
+  - `parseAgencyText()` adds subject and body patterns ("Submitted: X – Role", "we submitted you for X – Role", "for the role of Role on X"), a status (self-tape request, callback…) and the submission date (labelled, or the email date).
+  - `looksLikeAgencyEmail()` uses `AGENT_EMAILS` and the subject wording.
+- **`lib/web/search.ts`** defines a `SearchProvider` interface with Brave and Google Programmable Search implementations. `activeSearchProvider()` picks the provider from `SEARCH_PROVIDER` or whichever is configured. `presetQueries()` and `newsFeedUrl()` build the region presets. SEARCH sources (`WebSource.kind = SEARCH`, `query`) go through `checkSource()`: provider → `filterItems()` with `keywordsOptional`, so the query itself is the filter → findings. No result page is fetched.
+- **`lib/server/email.ts`** reads mail through a `MailSource` interface. `imapSource()` uses imapflow, opens the mailbox with `readOnly: true`, takes the newest 100 messages from the last 21 days, and parses them with mailparser. `processEmails()` dedupes by Message-ID, classifies each email, stores the parsed draft in `EmailMessage`, and raises a `NEW_MATCH` alert. Saving from the paste form marks the email `ACCEPTED` with the created record ids. `runMonitor()` checks email when it's configured.
+
 ## Import system
 
 `client upload → parseUploadAction (server) → mapping UI → previewImportAction → per-row decisions → commitImportAction`

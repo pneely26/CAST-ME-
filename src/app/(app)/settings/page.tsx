@@ -5,6 +5,8 @@ import { Badge, Flash, PageHeader, Section } from "@/components/ui";
 import { Field, TextArea } from "@/components/FormFields";
 import { DEFAULT_PLATFORMS } from "@/lib/constants";
 import { extraChannels } from "@/lib/alerts/channels";
+import { activeSearchProvider } from "@/lib/web/search";
+import { emailConfigured, emailFolder } from "@/lib/server/email";
 import { str, type SP } from "@/lib/server/filters";
 
 export const metadata = { title: "Settings" };
@@ -69,6 +71,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             {extraChannels.map((c) => (
               <div key={c.id} className="flex items-center justify-between"><span className="capitalize">{c.id} notifications</span><Badge tone={c.enabled() ? "good" : "muted"}>{c.enabled() ? "Configured" : "Not configured"}</Badge></div>
             ))}
+            <div className="flex items-center justify-between"><span>Web-wide search</span><Badge tone={activeSearchProvider() ? "good" : "muted"}>{activeSearchProvider()?.name ?? "Not configured"}</Badge></div>
+            <div className="flex items-center justify-between"><span>Email inbox</span><Badge tone={emailConfigured() ? "good" : "muted"}>{emailConfigured() ? `Reading “${emailFolder()}”` : "Not configured"}</Badge></div>
             <p className="text-xs text-muted">Deadline alerts fire {process.env.DEADLINE_ALERT_DAYS ?? 3} day(s) ahead. Records not re-verified in {process.env.STALE_AFTER_DAYS ?? 14} days show as STALE. Scheduled monitoring: run <code>npm run monitor</code> from cron (see README).</p>
           </div>
         </Section>

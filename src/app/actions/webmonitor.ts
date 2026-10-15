@@ -93,3 +93,66 @@ export async function dismissFindingAction(fd: FormData) {
   await prisma.webFinding.update({ where: { id: fid(fd) }, data: { status: "DISMISSED" } });
   revalidatePath("/web-monitor");
 }
+
+export async function addSearchAction(fd: FormData) {
+  await requireUser();
+  const query = fstr(fd, "query", 300);
+  if (!query) back("error=Enter+what+to+search+for#search");
+  const region = fregion(fd);
+  const url = `search:${region ?? "ANY"}:${query}`;
+  if (await prisma.webSource.findUnique({ where: { url } })) back("error=That+search+already+exists#sources");
+  const hours = Number(fstr(fd, "intervalHours", 4) ?? 12);
+  const s = await prisma.webSource.create({
+    data: {
+      name: `Web search: ${query}`.slice(0, 120),
+      url,
+      kind: "SEARCH",
+      query: query!,
+      region,
+      keywords: flist(fd, "keywords"),
+      excludeKeywords: flist(fd, "excludeKeywords"),
+      enabled: true,
+      termsConfirmed: true, // official search API used under its own terms with your key
+      minIntervalMinutes: Math.max(MIN_INTERVAL_MINUTES, Math.round((Number.isFinite(hours) ? hours : 12) * 60)),
+    },
+  });
+  await audit("CREATE", "WebSource", s.id, `Added web search: ${query}`);
+  revalidatePath("/web-monitor");
+  back("msg=Search+added#sources");
+}
+
+/** One click: a free news feed (and, if a search key is set, web searches) for each target market. */
+export async function setupRegionSearchesAction(fd: FormData) {
+  await requireUser();
+  if (fd.get("confirm") !== "yes") back("error=Tick+the+confirmation+box+first#search");
+  const { getProfile } = await import("@/lib/server/profile");
+  const { parseRegion, REGION_LABELS } = await import("@/lib/constants");
+  const { activeSearchProvider, newsFeedUrl, presetQueries } = await import("@/lib/web/search");
+  const profile = await getProfile();
+  const excludeKeywords = ["extras", "background actors", "unpaid"];
+  let added = 0;
+  for (const market of profile.targetMarkets) {
+    const region = parseRegion(market);
+    const city = region && region !== "OTHER" && region !== "NATIONWIDE" ? REGION_LABELS[region] : market;
+    const feed = newsFeedUrl(city);
+    if (!(await prisma.webSource.findUnique({ where: { url: feed } }))) {
+      await prisma.webSource.create({
+        data: { name: `News: casting in ${city}`, url: feed, kind: "RSS", region: region !== "OTHER" ? region : null, keywords: ["casting", "audition", "open call"], excludeKeywords, enabled: true, termsConfirmed: true, minIntervalMinutes: 12 * 60, termsNote: "Google News RSS search feed" },
+      });
+      added++;
+    }
+    if (activeSearchProvider()) {
+      for (const q of presetQueries(city).slice(0, 2)) {
+        const url = `search:${region ?? "ANY"}:${q}`;
+        if (await prisma.webSource.findUnique({ where: { url } })) continue;
+        await prisma.webSource.create({
+          data: { name: `Web search: ${q}`, url, kind: "SEARCH", query: q, region: region !== "OTHER" ? region : null, keywords: [], excludeKeywords, enabled: true, termsConfirmed: true, minIntervalMinutes: 12 * 60 },
+        });
+        added++;
+      }
+    }
+  }
+  await audit("CREATE", "WebSource", null, `Set up ${added} region search source(s) for: ${profile.targetMarkets.join(", ")}`);
+  revalidatePath("/web-monitor");
+  back(`msg=${encodeURIComponent(`Added ${added} source(s) for ${profile.targetMarkets.join(", ")}. Use “Check now” or wait for the next scheduled run.`)}#sources`);
+}

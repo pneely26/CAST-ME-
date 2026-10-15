@@ -24,7 +24,7 @@ describe.skipIf(!url)("blind spot detection with database", () => {
     execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url }, stdio: "ignore" });
     const db = await import("@/lib/server/db");
     const p = db.prisma;
-    for (const m of [p.webFinding, p.webSource, p.alert, p.auditLog, p.watchlistItem, p.blindSpot, p.agencySubmission, p.publicBreakdown, p.projectCasting, p.project, p.castingDirector, p.importBatch, p.sourceRun]) {
+    for (const m of [p.emailMessage, p.webFinding, p.webSource, p.alert, p.auditLog, p.watchlistItem, p.blindSpot, p.agencySubmission, p.publicBreakdown, p.projectCasting, p.project, p.castingDirector, p.importBatch, p.sourceRun]) {
       await (m as unknown as { deleteMany: () => Promise<unknown> }).deleteMany();
     }
     const records = await import("@/lib/server/records");
@@ -140,5 +140,46 @@ describe.skipIf(!url)("blind spot detection with database", () => {
     expect((await wm.checkSource(a.id, { deps })).skipped).toBe("Terms not confirmed");
     expect((await wm.checkSource(b.id, { deps })).skipped).toMatch(/never collects/);
     expect(calls).toBe(0);
+  });
+
+  it("email inbox: turns new emails into review drafts, classifies agent emails, skips duplicates", async () => {
+    const email = await import("@/lib/server/email");
+    process.env.AGENT_EMAILS = "talentagency.com";
+    const msgs = [
+      { messageId: "<1@x>", from: "Jo Agent <jo@talentagency.com>", subject: "Submitted: Iron & Velvet - Tasha", date: new Date("2026-10-14T12:00:00Z"), text: "Hi Paige, we submitted you today. Casting: Rosa Grant. Network: HBO." },
+      { messageId: "<2@x>", from: "news@castingnews.example", subject: "Now casting: Harbor Lights", date: new Date("2026-10-14T13:00:00Z"), text: "Network: Apple TV+\nLocation: New York\nSubmissions Due: Oct 30\n\n[NORA VANCE] Female, 20s-30s. Lounge singer." },
+      { messageId: "<3@x>", from: "x@y.z", subject: "tiny", date: null, text: "short" },
+    ];
+    const r = await email.checkEmail({ fetchRecent: async () => msgs });
+    expect(r.ok).toBe(true);
+    expect(r.created).toBe(2);
+    const saved = await mod.prisma.emailMessage.findMany({ orderBy: { receivedAt: "asc" } });
+    expect(saved.map((e) => e.kind)).toEqual(["AGENCY_SUBMISSION", "CASTING_NOTICE"]);
+    expect((saved[0].parsed as { project: string; role: string }).project).toBe("Iron & Velvet");
+    expect((saved[1].parsed as { roles: { roleName: string }[] }).roles[0].roleName).toBe("Nora Vance");
+    // second run: nothing new
+    expect((await email.checkEmail({ fetchRecent: async () => msgs })).created).toBe(0);
+    // a mailbox error is reported, not thrown
+    const bad = await email.checkEmail({ fetchRecent: async () => { throw Object.assign(new Error("auth"), { authenticationFailed: true }); } });
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toMatch(/app password/);
+  });
+
+  it("web search sources: runs through the configured search API", async () => {
+    const wm = await import("@/lib/server/webmonitor");
+    process.env.BRAVE_SEARCH_API_KEY = "test";
+    const src = await mod.prisma.webSource.create({
+      data: { name: "Web search: casting Chicago", url: "search:CHICAGO:casting Chicago", kind: "SEARCH", query: '"now casting" "Chicago"', region: "CHICAGO", keywords: [], excludeKeywords: [], enabled: true, termsConfirmed: true },
+    });
+    const r = await wm.checkSource(src.id, {
+      deps: { fetch: async () => Response.json({ web: { results: [
+        { title: "Now casting: Chicago indie", url: "https://indie.example.org/casting", description: "Seeking actors in Chicago" },
+        { title: "LA casting call", url: "https://la.example.org", description: "Los Angeles, CA" },
+      ] } }) },
+    });
+    expect(r.newFindings).toBe(1);
+    delete process.env.BRAVE_SEARCH_API_KEY;
+    const r2 = await wm.checkSource(src.id, { now: new Date(Date.now() + 86_400_000) });
+    expect(r2.skipped).toMatch(/No search API key/);
   });
 });

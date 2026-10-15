@@ -1,7 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { getPlatforms } from "@/lib/server/profile";
-import { acceptFindingAction, addWebSourceAction, checkWebSourceAction, deleteWebSourceAction, dismissFindingAction, toggleWebSourceAction } from "@/app/actions/webmonitor";
+import { acceptFindingAction, addSearchAction, addWebSourceAction, checkWebSourceAction, deleteWebSourceAction, dismissFindingAction, setupRegionSearchesAction, toggleWebSourceAction } from "@/app/actions/webmonitor";
+import { activeSearchProvider, searchProviders } from "@/lib/web/search";
+import { getProfile } from "@/lib/server/profile";
 import { Badge, DeadlineBadge, Empty, Flash, PageHeader, Section } from "@/components/ui";
 import { Field, FormSection, PlatformSelect, RegionSelect, TextArea } from "@/components/FormFields";
 import { FilterBar, Select, regionOptions } from "@/components/Filters";
@@ -23,18 +25,20 @@ export default async function WebMonitorPage({ searchParams }: { searchParams: P
     ...(r ? { region: r } : {}),
     ...(str(sp, "finding") ? { id: str(sp, "finding") } : {}),
   };
-  const [sources, findings, newCount, platforms] = await Promise.all([
+  const provider = activeSearchProvider();
+  const [sources, findings, newCount, platforms, profile] = await Promise.all([
     prisma.webSource.findMany({ orderBy: { createdAt: "asc" }, include: { _count: { select: { findings: true } } } }),
     prisma.webFinding.findMany({ where, include: { source: true }, orderBy: { discoveredAt: "desc" }, take: 200 }),
     prisma.webFinding.count({ where: { status: "NEW" } }),
     getPlatforms(),
+    getProfile(),
   ]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Web Monitor"
-        description="Automatically checks public casting pages and feeds you choose — by region and keyword — and collects new listings here for you to review."
+        description="Searches the web and checks public casting pages and feeds — by region and keyword — and collects new listings here for you to review."
       />
       <Flash message={str(sp, "msg")} />
       <Flash message={str(sp, "error")} tone="bad" />
@@ -92,6 +96,46 @@ export default async function WebMonitorPage({ searchParams }: { searchParams: P
         )}
       </Section>
 
+      <Section title="Search the whole web" subtitle="Finds public casting calls on any site a search engine indexes — casting offices, productions, theatres, news, social posts." className="scroll-mt-4">
+        <div id="search" className="grid gap-5 p-4 lg:grid-cols-2">
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Search API:</span>
+              {provider ? <Badge tone="good">{provider.name}</Badge> : <Badge tone="muted">Not connected</Badge>}
+            </div>
+            {!provider && (
+              <div className="rounded-md border border-line bg-paper p-3 text-xs text-ink-soft">
+                To search the whole web, add a key to <code>.env</code> and restart. Either:
+                <ul className="mt-1 list-disc pl-5">
+                  <li><strong>Brave Search API</strong> (has a free plan): sign up at api-dashboard.search.brave.com → <code>BRAVE_SEARCH_API_KEY=&quot;…&quot;</code></li>
+                  <li><strong>Google Programmable Search</strong>: <code>GOOGLE_CSE_KEY=&quot;…&quot;</code> and <code>GOOGLE_CSE_ID=&quot;…&quot;</code></li>
+                </ul>
+                The free news feeds below work without a key.
+              </div>
+            )}
+            <form action={setupRegionSearchesAction} className="rounded-md border border-line p-3">
+              <div className="font-medium">Set up my regions automatically</div>
+              <p className="mt-1 text-xs text-muted">
+                Adds a free Google News casting feed{provider ? " and two web searches" : ""} for each of your target markets: <strong>{profile.targetMarkets.join(", ") || "none set"}</strong> (edit them in Settings). Checked every 12 hours.
+              </p>
+              <label className="mt-2 flex items-start gap-2 text-xs"><input type="checkbox" name="confirm" value="yes" className="mt-0.5" /> OK to check these public feeds{provider ? " and use my search API quota" : ""} automatically</label>
+              <button className="btn-primary mt-2">Set up region searches</button>
+            </form>
+          </div>
+          <form action={addSearchAction} className="space-y-3 rounded-md border border-line p-3">
+            <div className="text-sm font-medium">Add a custom web search</div>
+            <label className="block"><span className="label">Search for</span><input name="query" className="input" placeholder={'"now casting" Chicago SAG-AFTRA'} required /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <RegionSelect label="Region" />
+              <label className="block"><span className="label">Check every (hours)</span><input name="intervalHours" type="number" min={1} max={168} defaultValue={12} className="input" /></label>
+            </div>
+            <label className="block"><span className="label">Exclude words</span><input name="excludeKeywords" className="input" placeholder="extras, unpaid" /></label>
+            <button className="btn-secondary" disabled={!provider} title={provider ? "" : "Connect a search API first"}>Add search</button>
+            {!provider && <p className="text-xs text-muted">Needs a search API key ({searchProviders.map((p) => p.name).join(" or ")}).</p>}
+          </form>
+        </div>
+      </Section>
+
       <Section title="Sources" subtitle="Checked automatically when the monitor runs (npm run monitor / scheduled), or on demand." className="scroll-mt-4">
         <div id="sources" />
         {sources.length === 0 ? (
@@ -104,12 +148,16 @@ export default async function WebMonitorPage({ searchParams }: { searchParams: P
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{s.name}</span>
                     <Badge tone={s.enabled ? "good" : "muted"}>{s.enabled ? "Active" : "Paused"}</Badge>
-                    <Badge tone="neutral">{s.kind === "RSS" ? "Feed" : "Web page"}</Badge>
+                    <Badge tone="neutral">{s.kind === "RSS" ? "Feed" : s.kind === "SEARCH" ? "Web search" : "Web page"}</Badge>
                     {s.region && <Badge tone="accent">{REGION_LABELS[s.region as RegionCode]}</Badge>}
                   </div>
-                  <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="block truncate text-xs text-accent hover:underline">{s.url}</a>
+                  {s.kind === "SEARCH" ? (
+                    <div className="truncate text-xs text-ink-soft">Searching: {s.query}</div>
+                  ) : (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="block truncate text-xs text-accent hover:underline">{s.url}</a>
+                  )}
                   <div className="text-xs text-muted">
-                    Every {Math.round(s.minIntervalMinutes / 60)}h · keywords: {(s.keywords.length ? s.keywords : DEFAULT_KEYWORDS).slice(0, 6).join(", ")}{s.excludeKeywords.length ? ` · excluding: ${s.excludeKeywords.join(", ")}` : ""} · {s._count.findings} finding(s)
+                    Every {Math.round(s.minIntervalMinutes / 60)}h · keywords: {(s.keywords.length ? s.keywords : s.kind === "SEARCH" ? ["(search query)"] : DEFAULT_KEYWORDS).slice(0, 6).join(", ")}{s.excludeKeywords.length ? ` · excluding: ${s.excludeKeywords.join(", ")}` : ""} · {s._count.findings} finding(s)
                   </div>
                   <div className={`text-xs ${s.lastStatus && s.lastStatus !== "OK" ? "text-red-700" : "text-ink-soft"}`}>
                     {s.lastCheckedAt ? `Last checked ${fmtDateTime(s.lastCheckedAt)} — ${s.lastMessage ?? s.lastStatus}` : "Not checked yet"}

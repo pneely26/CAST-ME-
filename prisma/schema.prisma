@@ -321,6 +321,7 @@ model SourceRun {
 enum WebSourceKind {
   RSS
   HTML
+  SEARCH
 }
 
 enum FindingStatus {
@@ -341,6 +342,8 @@ model WebSource {
   excludeKeywords    String[]
   // Optional CSS selector for one listing on an HTML page (e.g. "article", ".post")
   itemSelector       String?
+  // SEARCH sources: the query sent to the configured search API
+  query              String?
   enabled            Boolean       @default(false)
   // User confirms the site is public and its terms allow automated checking
   termsConfirmed     Boolean       @default(false)
@@ -374,5 +377,30 @@ model WebFinding {
   source WebSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   @@unique([sourceId, key])
+  @@index([status])
+}
+
+// ---------- Email inbox (the user's own mailbox, read-only) ----------
+
+enum EmailKind {
+  CASTING_NOTICE
+  AGENCY_SUBMISSION
+}
+
+model EmailMessage {
+  id          String        @id @default(cuid())
+  messageId   String        @unique
+  folder      String
+  fromAddress String?
+  subject     String?
+  receivedAt  DateTime?
+  bodyText    String
+  kind        EmailKind
+  parsed      Json?
+  status      FindingStatus @default(NEW)
+  // ids of records created from this email (breakdowns or agency submissions)
+  createdIds  String[]
+  createdAt   DateTime      @default(now())
+
   @@index([status])
 }

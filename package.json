@@ -28,7 +28,9 @@
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.2",
+    "imapflow": "^2.4.3",
     "jose": "^6.2.12",
+    "mailparser": "^3.9.39",
     "next": "^15.5.26",
     "papaparse": "^5.7.0",
     "pdf-lib": "^1.17.1",
@@ -42,6 +44,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/bcryptjs": "^2.4.6",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^26.6.3",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.3.0",

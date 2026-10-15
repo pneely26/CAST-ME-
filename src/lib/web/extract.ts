@@ -171,27 +171,37 @@ export interface Finding {
   matchedKeywords: string[];
 }
 
-export interface ExtractOptions {
-  kind: "RSS" | "HTML";
+export interface FilterOptions {
   baseUrl: string;
-  selector?: string | null;
   keywords: string[];
   excludeKeywords: string[];
   /** The region the user is monitoring with this source. If set, only listings for it (or nationwide/unspecified) are kept. */
   region?: RegionCode | null;
+  /** When true, an empty keyword list means "keep everything" instead of using defaults (used for search results). */
+  keywordsOptional?: boolean;
+}
+
+export interface ExtractOptions extends FilterOptions {
+  kind: "RSS" | "HTML";
+  selector?: string | null;
 }
 
 /** Turn a fetched page/feed into filtered, de-duplicated findings. */
 export function extractFindings(body: string, opts: ExtractOptions): Finding[] {
   const items = opts.kind === "RSS" ? parseFeed(body, opts.baseUrl) : parseHtml(body, opts.baseUrl, opts.selector);
-  const keywords = opts.keywords.length ? opts.keywords : DEFAULT_KEYWORDS;
+  return filterItems(items, opts);
+}
+
+/** Keyword / exclude / region filtering + field detection, shared by feeds, pages and search results. */
+export function filterItems(items: RawItem[], opts: FilterOptions): Finding[] {
+  const keywords = opts.keywords.length ? opts.keywords : opts.keywordsOptional ? [] : DEFAULT_KEYWORDS;
   const seen = new Set<string>();
   const out: Finding[] = [];
   for (const it of items) {
-    if (!it.title) continue;
+    if (!it.title || !it.link) continue;
     const text = `${it.title} ${it.summary}`;
     const { matched, excluded } = matchKeywords(text, keywords, opts.excludeKeywords);
-    if (excluded || matched.length === 0) continue;
+    if (excluded || (keywords.length > 0 && matched.length === 0)) continue;
     const regions = detectRegions(text);
     if (opts.region && opts.region !== "NATIONWIDE" && regions.length > 0 && !regions.includes(opts.region) && !regions.includes("NATIONWIDE")) continue;
     const key = it.link === opts.baseUrl ? `${it.link}#${it.title.toLowerCase().slice(0, 120)}` : it.link;
@@ -206,7 +216,7 @@ export function extractFindings(body: string, opts: ExtractOptions): Finding[] {
       region: regions.includes(opts.region as RegionCode) ? (opts.region as RegionCode) : (regions[0] ?? opts.region ?? null),
       detectedDeadline: detectDeadline(text),
       detectedPlatform: detectPlatform(text),
-      matchedKeywords: matched,
+      matchedKeywords: matched.length ? matched : ["search result"],
     });
   }
   return out.slice(0, 100);

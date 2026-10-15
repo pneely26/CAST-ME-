@@ -4,6 +4,7 @@ import { generateAlerts } from "../alerts/engine";
 import { rerunUnreviewed } from "./detection";
 import { updateBreakdownRelevance } from "./profile";
 import { runWebSources } from "./webmonitor";
+import { checkEmail, emailConfigured } from "./email";
 
 /**
  * Scheduled monitoring pipeline. Safe to run from cron (npm run monitor) or /api/cron/monitor.
@@ -35,6 +36,7 @@ export async function runMonitor(now = new Date()) {
   const web = await runWebSources(now);
   const checked = web.filter((r) => !r.skipped);
   log.push(`web monitor: checked ${checked.length} source(s), ${web.reduce((n, r) => n + r.newFindings, 0)} new finding(s)` + (checked.some((r) => !r.ok) ? ` (${checked.filter((r) => !r.ok).map((r) => r.message).join("; ")})` : ""));
+  if (emailConfigured()) log.push(`email: ${(await checkEmail()).message}`);
   // Past-deadline breakdowns are displayed as CASTING CLOSED via sourceState(); stored data is not rewritten.
   await updateBreakdownRelevance();
   const rerun = await rerunUnreviewed();

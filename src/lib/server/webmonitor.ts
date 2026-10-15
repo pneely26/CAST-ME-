@@ -2,7 +2,8 @@ import type { WebSource } from "@prisma/client";
 import { prisma } from "./db";
 import { audit } from "./audit";
 import { politeFetch, type FetchDeps } from "../web/fetcher";
-import { extractFindings } from "../web/extract";
+import { extractFindings, filterItems, type Finding } from "../web/extract";
+import { activeSearchProvider, SearchError } from "../web/search";
 import { MANUAL_CHECK_COOLDOWN_MINUTES, MIN_INTERVAL_MINUTES, isBlockedHost, BLOCKED_REASON } from "../web/policy";
 import { emitAlert } from "../alerts/engine";
 import { createBreakdown } from "./records";
@@ -19,9 +20,10 @@ export interface CheckResult {
 }
 
 /** Is this source allowed to run at all? */
-export function sourceRunnable(s: Pick<WebSource, "enabled" | "termsConfirmed" | "url">): string | null {
+export function sourceRunnable(s: Pick<WebSource, "enabled" | "termsConfirmed" | "url" | "kind">): string | null {
   if (!s.termsConfirmed) return "Terms not confirmed";
   if (!s.enabled) return "Disabled";
+  if (s.kind === "SEARCH") return activeSearchProvider() ? null : "No search API key configured (see Settings → Web search)";
   try {
     if (isBlockedHost(new URL(s.url).hostname)) return BLOCKED_REASON;
   } catch {
@@ -46,29 +48,41 @@ export async function checkSource(sourceId: string, opts: { manual?: boolean; no
     return { sourceId, ok: true, skipped: msg, message: msg, newFindings: 0 };
   }
 
-  const res = await politeFetch(s.url, opts.deps);
-  if (!res.ok) {
-    await prisma.webSource.update({
-      where: { id: s.id },
-      data: {
-        lastCheckedAt: now,
-        lastStatus: res.code,
-        lastMessage: res.message,
-        // Hard stops: pause the source so it isn't retried automatically.
-        ...(["BLOCKED_DOMAIN", "ROBOTS_DISALLOWED", "LOGIN_REQUIRED", "CHALLENGE"].includes(res.code) ? { enabled: false } : {}),
-      },
+  let findings: Finding[];
+  if (s.kind === "SEARCH") {
+    const provider = activeSearchProvider()!;
+    try {
+      const items = await provider.search(s.query ?? "", { fetch: opts.deps?.fetch, freshnessDays: 14 });
+      findings = filterItems(items, { baseUrl: s.url, keywords: s.keywords, excludeKeywords: s.excludeKeywords, region: s.region, keywordsOptional: true });
+    } catch (e) {
+      const message = e instanceof SearchError ? e.message : `Search failed: ${(e as Error).message}`;
+      await prisma.webSource.update({ where: { id: s.id }, data: { lastCheckedAt: now, lastStatus: "SEARCH_ERROR", lastMessage: message } });
+      return { sourceId, ok: false, message, newFindings: 0 };
+    }
+  } else {
+    const res = await politeFetch(s.url, opts.deps);
+    if (!res.ok) {
+      await prisma.webSource.update({
+        where: { id: s.id },
+        data: {
+          lastCheckedAt: now,
+          lastStatus: res.code,
+          lastMessage: res.message,
+          // Hard stops: pause the source so it isn't retried automatically.
+          ...(["BLOCKED_DOMAIN", "ROBOTS_DISALLOWED", "LOGIN_REQUIRED", "CHALLENGE"].includes(res.code) ? { enabled: false } : {}),
+        },
+      });
+      return { sourceId, ok: false, message: res.message, newFindings: 0 };
+    }
+    findings = extractFindings(res.body, {
+      kind: s.kind as "RSS" | "HTML",
+      baseUrl: res.url,
+      selector: s.itemSelector,
+      keywords: s.keywords,
+      excludeKeywords: s.excludeKeywords,
+      region: s.region,
     });
-    return { sourceId, ok: false, message: res.message, newFindings: 0 };
   }
-
-  const findings = extractFindings(res.body, {
-    kind: s.kind,
-    baseUrl: res.url,
-    selector: s.itemSelector,
-    keywords: s.keywords,
-    excludeKeywords: s.excludeKeywords,
-    region: s.region,
-  });
 
   let created = 0;
   for (const f of findings) {
@@ -101,7 +115,7 @@ export async function checkSource(sourceId: string, opts: { manual?: boolean; no
 
   await prisma.webSource.update({
     where: { id: s.id },
-    data: { lastCheckedAt: now, lastStatus: "OK", lastMessage: `${findings.length} matching listing(s) on page, ${created} new.` },
+    data: { lastCheckedAt: now, lastStatus: "OK", lastMessage: `${findings.length} matching listing(s)${s.kind === "SEARCH" ? " in search results" : " on page"}, ${created} new.` },
   });
   if (created > 0) {
     await audit("IMPORT", "WebFinding", s.id, `Web monitor found ${created} new listing(s) on ${s.name}`, { source: s.url });
