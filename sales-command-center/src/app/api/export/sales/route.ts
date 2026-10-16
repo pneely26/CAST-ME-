@@ -1,3 +1,4 @@
+import { can } from "@/server/policy";
 import { getActor } from "@/server/auth";
 import { getSettings } from "@/server/settings";
 import { listOpportunities } from "@/server/services/salesQuery";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const actor = await getActor();
   if (!actor) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(actor, "data.export")) return Response.json({ error: "Only the coordinator can export data." }, { status: 403 });
   const tz = (await getSettings()).timezone;
   const params = Object.fromEntries(new URL(req.url).searchParams);
   const range = resolveRange(params.range ?? "month", params.from, params.to, tz);
@@ -32,6 +34,11 @@ export async function GET(req: Request) {
       { header: "Final amount (won only)", value: (o) => (o.status === "WON" ? n(o.finalAmount) : "") },
       { header: "Commission", value: (o) => n(o.commissionAmount) },
       { header: "Payment status", value: (o) => (o.status === "WON" ? PAYMENT_STATUS_LABEL[o.paymentStatus] : "") },
+      { header: "Signed 44", value: (o) => (o.signed44 ? "Yes" : "No") },
+      { header: "Run date", value: (o) => o.runDate ?? "" },
+      { header: "GO status", value: (o) => o.goStatus },
+      { header: "Called to desk", value: (o) => (o.calledToDesk ? "Yes" : "No") },
+      { header: "Tentative run date", value: (o) => o.tentativeRunDate ?? "" },
       { header: "Lost reason", value: (o) => o.lostReason },
       { header: "Notes", value: (o) => o.notes },
     ]),

@@ -1,3 +1,4 @@
+import { can } from "@/server/policy";
 import { getActor } from "@/server/auth";
 import { getSettings } from "@/server/settings";
 import { listLeads } from "@/server/services/leadQuery";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const actor = await getActor();
   if (!actor) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(actor, "data.export")) return Response.json({ error: "Only the coordinator can export data." }, { status: 403 });
   const settings = await getSettings();
   const tz = settings.timezone;
   const params = Object.fromEntries(new URL(req.url).searchParams);
@@ -33,6 +35,9 @@ export async function GET(req: Request) {
     { header: "Area", value: (l) => l.area?.name },
     { header: "Source", value: (l) => l.source },
     { header: "Industry", value: (l) => l.industry },
+    { header: "Prospect / account #", value: (l) => l.externalId },
+    { header: "Employees", value: (l) => (l.employeeCount ?? "") },
+    { header: "Details from import", value: (l) => (l.sourceDetails && typeof l.sourceDetails === "object" ? Object.entries(l.sourceDetails as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join("; ") : "") },
     { header: "Assigned rep", value: (l) => l.assignedRep?.name },
     { header: "Priority", value: (l) => PRIORITY_LABEL[l.priority] },
     { header: "Status", value: (l) => LEAD_STATUS_LABEL[l.status] },

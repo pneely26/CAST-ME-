@@ -95,6 +95,7 @@ export function buildLeadWhere(actor: Actor, params: SP, settings: AppSettings, 
     and.push({
       OR: [
         { businessName: ci },
+        { externalId: ci },
         { contactName: ci },
         { email: ci },
         { address: ci },

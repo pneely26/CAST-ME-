@@ -27,6 +27,8 @@ function leadFields(fd: FormData): LeadInput {
     priority: (str(fd, "priority") || "NORMAL") as LeadPriority,
     status: (str(fd, "status") || "NEW") as LeadStatus,
     estimatedValue: strOrNull(fd, "estimatedValue", 30),
+    ...(fd.has("externalId") ? { externalId: strOrNull(fd, "externalId", 60) } : {}),
+    ...(fd.has("employeeCount") ? { employeeCount: strOrNull(fd, "employeeCount", 12) } : {}),
     notes: strOrNull(fd, "notes", 10000),
     tags: tags(fd),
   };

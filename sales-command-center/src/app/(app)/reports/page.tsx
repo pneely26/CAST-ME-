@@ -50,7 +50,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <PageHeader
         title="Reports"
         subtitle={`${range.label}${rep ? ` · ${reps.find((r) => r.id === rep)?.name ?? "rep"}` : isCoord ? " · all reps" : ""}. Every figure is counted from saved records.`}
-        actions={<a className="btn-secondary" href={`/api/export/reports?${qs}`}>Export CSV</a>}
+        actions={isCoord ? <a className="btn-secondary" href={`/api/export/reports?${qs}`}>Export CSV</a> : undefined}
       />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <RangePicker range={range} basePath="/reports" extra={extra} allowAll />

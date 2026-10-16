@@ -10,6 +10,7 @@ import { addDays } from "@/lib/time";
 import clsx from "clsx";
 
 interface Props {
+  canSetStatus?: boolean;
   leadId: string;
   currentStatus: LeadStatus;
   today: string;
@@ -132,12 +133,16 @@ export function VisitForm(p: Props) {
         )}
       </div>
 
-      <label className="block">
-        <span className="label">Lead status after this visit</span>
-        <select className="input" value={shownStatus} onChange={(e) => { setStatusTouched(true); setStatus(e.target.value as LeadStatus); }}>
-          {LEAD_STATUSES.map((s) => <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}{s === suggested && !statusTouched && outcome ? " (suggested)" : ""}</option>)}
-        </select>
-      </label>
+      {p.canSetStatus ? (
+        <label className="block">
+          <span className="label">Lead status after this visit</span>
+          <select className="input" value={shownStatus} onChange={(e) => { setStatusTouched(true); setStatus(e.target.value as LeadStatus); }}>
+            {LEAD_STATUSES.map((s) => <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}{s === suggested && !statusTouched && outcome ? " (suggested)" : ""}</option>)}
+          </select>
+        </label>
+      ) : (
+        outcome && <p className="text-xs text-muted">Lead status will update automatically to <b>{LEAD_STATUS_LABEL[suggested]}</b>.</p>
+      )}
 
       <button type="button" className="text-sm text-accent" onClick={() => setMore((m) => !m)} aria-expanded={more}>{more ? "Hide" : "More"}: objections, notes, attachment, time</button>
       {more && (

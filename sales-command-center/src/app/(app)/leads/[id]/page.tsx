@@ -13,7 +13,7 @@ import { setStatusAction, archiveLeadAction, assignLeadAction } from "@/app/acti
 import { createFollowUpAction, followUpStatusAction } from "@/app/actions/followups";
 import { CLOSED_STATUSES, INTEREST_LABEL, LEAD_STATUSES, LEAD_STATUS_LABEL, VISIT_TYPE_LABEL, money } from "@/lib/labels";
 import { formatPhone } from "@/lib/normalize";
-import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay } from "@/lib/time";
+import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime, visitDateTime, fmtDateKey } from "@/lib/time";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -94,7 +94,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
             {!lead.archivedAt && <Link href={`/leads/${lead.id}/visit`} className="btn-primary">Record visit</Link>}
             {!lead.archivedAt && lead.status !== "DO_NOT_CONTACT" && <Link href={`/appointments/new?lead=${lead.id}`} className="btn-secondary">Schedule appointment</Link>}
             {!lead.archivedAt && <Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">New opportunity</Link>}
-            <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>
+            {isCoord && <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>}
           </>
         }
       />
@@ -124,7 +124,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 <KV label="Last contact">{lead.lastContactAt ? fmtDate(lead.lastContactAt, tz) : "—"}</KV>
                 <KV label="Visits recorded">{lead.visitCount} in person{lead.visits.length > lead.visitCount ? ` + ${lead.visits.length - lead.visitCount} call(s)` : ""}</KV>
                 <KV label="Next follow-up">{lead.nextFollowUpAt ? <span className="inline-flex items-center gap-1">{fmtDate(lead.nextFollowUpAt, tz)} <DueBadge due={lead.nextFollowUpAt} now={now} tz={tz} /></span> : "—"}</KV>
-                <KV label="Next appointment">{lead.nextAppointmentAt ? fmtDateTime(lead.nextAppointmentAt, tz) : "—"}</KV>
+                <KV label="Next appointment">{(() => { const n = lead.appointments.find((a) => a.startAt.getTime() === lead.nextAppointmentAt?.getTime()); return n ? apptDateTime(n, tz) : lead.nextAppointmentAt ? fmtDateTime(lead.nextAppointmentAt, tz) : "—"; })()}</KV>
                 <KV label="Next planned visit">{plannedStops[0] ? fmtDate(new Date(plannedStops[0].dayPlan.date + "T12:00:00Z"), "UTC") : "—"}</KV>
                 <KV label="Estimated value">{money(lead.estimatedValue ? Number(lead.estimatedValue) : null)}</KV>
                 <KV label="Created">{fmtDate(lead.createdAt, tz)}{lead.source ? ` · ${lead.source}` : ""}</KV>
@@ -173,7 +173,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           </div>
 
           <div className="space-y-5">
-            <Section title="Status">
+            {isCoord && <Section title="Status">
               <ActionForm action={setStatusAction} className="flex gap-2 p-4" confirm={undefined}>
                 <input type="hidden" name="id" value={lead.id} />
                 <select name="status" defaultValue={lead.status} className="input" aria-label="Lead status">
@@ -181,7 +181,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 </select>
                 <SubmitButton className="btn-secondary" confirm="Change this lead's status? Marking Lost, Not a Fit or Do Not Contact cancels open follow-ups and planned visits (history is kept).">Update</SubmitButton>
               </ActionForm>
-            </Section>
+            </Section>}
             <Section title="Upcoming">
               {upcomingAppts.length === 0 && plannedStops.length === 0 ? (
                 <Empty>Nothing scheduled.</Empty>
@@ -190,7 +190,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                   {upcomingAppts.map((a) => (
                     <li key={a.id} className="px-4 py-2.5">
                       <Link href={`/appointments/${a.id}`} className="font-medium hover:underline">{a.kind === "FOLLOW_UP_VISIT" ? "Follow-up visit" : "Appointment"}</Link>
-                      <div className="text-xs text-muted">{fmtDateTime(a.startAt, tz)}–{fmtTime(a.endAt, tz)} · {a.rep.name}</div>
+                      <div className="text-xs text-muted">{apptRange(a, tz)} · {a.rep.name}</div>
                     </li>
                   ))}
                   {plannedStops.map((s) => (
@@ -231,7 +231,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "contact" && (
-        <Section title="Contact information" action={<Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link>}>
+        <Section title="Contact information" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
           <dl className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
             <KV label="Contact person">{lead.contactName}</KV>
             <KV label="Job title">{lead.jobTitle}</KV>
@@ -241,10 +241,20 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
             <KV label="Area / territory">{[lead.area?.name, lead.territory?.name].filter(Boolean).join(" · ") || null}</KV>
             <KV label="Industry">{lead.industry}</KV>
             <KV label="Lead source">{lead.source}</KV>
+            <KV label="Prospect / account #">{lead.externalId}</KV>
+            <KV label="Employees">{lead.employeeCount != null ? lead.employeeCount.toLocaleString() : null}</KV>
             <KV label="Assigned rep">{lead.assignedRep?.name ?? "Unassigned"}</KV>
             <KV label="Created">{fmtDateTime(lead.createdAt, tz)}</KV>
             <KV label="Last updated">{fmtDateTime(lead.updatedAt, tz)}</KV>
           </dl>
+          {lead.sourceDetails && typeof lead.sourceDetails === "object" && Object.keys(lead.sourceDetails).length > 0 && (
+            <div className="border-t border-line px-4 py-3">
+              <div className="mb-2 text-xs font-medium text-muted">Details from import — other columns of the imported file, exactly as written</div>
+              <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-3 lg:grid-cols-4">
+                {Object.entries(lead.sourceDetails as Record<string, string>).map(([k, v]) => <div key={k} className="min-w-0"><dt className="truncate text-xs text-muted">{k}</dt><dd className="truncate">{String(v)}</dd></div>)}
+              </dl>
+            </div>
+          )}
         </Section>
       )}
 
@@ -255,7 +265,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               {lead.visits.map((v) => (
                 <li key={v.id} className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{fmtDateTime(v.visitAt, tz)}</span>
+                    <span className="font-medium">{visitDateTime(v, tz)}</span>
                     <Badge tone="neutral">{VISIT_TYPE_LABEL[v.type]}</Badge>
                     <OutcomeBadge o={v.outcome} />
                     {v.interestLevel && <Badge tone={v.interestLevel === "HIGH" ? "good" : v.interestLevel === "MEDIUM" ? "info" : "muted"}>Interest: {INTEREST_LABEL[v.interestLevel]}</Badge>}
@@ -266,7 +276,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                     {v.feedback && <KV label="Feedback" className="sm:col-span-2"><span className="whitespace-pre-line">{v.feedback}</span></KV>}
                     {v.objections && <KV label="Objections / reasons" className="sm:col-span-2"><span className="whitespace-pre-line">{v.objections}</span></KV>}
                     {v.followUpAction && <KV label="Follow-up">{v.followUpAction}{v.followUpDueAt ? ` — due ${fmtDate(v.followUpDueAt, tz)}` : ""}</KV>}
-                    {v.nextAppointment && <KV label="Next appointment"><Link className="link" href={`/appointments/${v.nextAppointment.id}`}>{fmtDateTime(v.nextAppointment.startAt, tz)}</Link></KV>}
+                    {v.nextAppointment && <KV label="Next appointment"><Link className="link" href={`/appointments/${v.nextAppointment.id}`}>{apptDateTime(v.nextAppointment, tz)}</Link></KV>}
                     {v.notes && <KV label="Notes" className="sm:col-span-2"><span className="whitespace-pre-line">{v.notes}</span></KV>}
                     {v.attachmentName && <KV label="Attachment"><a className="link" href={`/api/files/visit/${v.id}`}>{v.attachmentName}</a></KV>}
                   </dl>
@@ -308,7 +318,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 return (
                   <li key={a.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/appointments/${a.id}`} className="font-medium hover:underline">{fmtDateTime(a.startAt, tz)}–{fmtTime(a.endAt, tz)}</Link>
+                      <Link href={`/appointments/${a.id}`} className="font-medium hover:underline">{apptRange(a, tz)}</Link>
                       <ApptStatusBadge s={a.status} />
                       {moves.length > 0 && <Badge tone="warn">Rescheduled {moves.length}×</Badge>}
                       {a.reschedules.some((r) => r.status === "PENDING") && <RescheduleBadge s="PENDING" />}
@@ -333,7 +343,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           {lead.opportunities.length === 0 ? <Empty>No opportunities yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="tbl">
-                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Rep</th></tr></thead>
+                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Signed 44</th><th>Run date</th><th>GO status</th><th>Called to desk</th><th>Rep</th></tr></thead>
                 <tbody>
                   {lead.opportunities.map((o) => (
                     <tr key={o.id}>
@@ -344,6 +354,10 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                       <td>{o.status === "WON" ? money(o.finalAmount ? Number(o.finalAmount) : null) : "—"}</td>
                       <td>{fmtDate(o.openedAt, tz)}</td>
                       <td>{o.closedAt ? fmtDate(o.closedAt, tz) : "—"}</td>
+                      <td>{o.signed44 ? "Yes" : "No"}</td>
+                      <td className="whitespace-nowrap">{o.runDate ? fmtDateKey(o.runDate) : "—"}</td>
+                      <td>{o.goStatus || "—"}</td>
+                      <td className="whitespace-nowrap">{o.calledToDesk ? `Yes${o.tentativeRunDate ? ` · tentative ${fmtDateKey(o.tentativeRunDate)}` : ""}` : "No"}</td>
                       <td>{o.rep.name}</td>
                     </tr>
                   ))}

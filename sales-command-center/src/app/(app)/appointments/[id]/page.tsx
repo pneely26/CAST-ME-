@@ -9,7 +9,7 @@ import { ApptStatusBadge, RescheduleBadge } from "@/components/badges";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { appointmentDetailsAction, appointmentStatusAction, cancelRescheduleAction, moveAppointmentAction, requestRescheduleAction } from "@/app/actions/appointments";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/labels";
-import { dateKeyInTz, fmtDateTime, fmtTime, timeInTz } from "@/lib/time";
+import { dateKeyInTz, fmtDateTime, fmtTime, timeInTz, apptRange } from "@/lib/time";
 
 export const metadata = { title: "Appointment" };
 
@@ -63,7 +63,7 @@ export default async function AppointmentPage({ params, searchParams }: { params
         <div className="space-y-5 lg:col-span-2">
           <Section title="Details">
             <dl className="grid gap-4 p-4 sm:grid-cols-2">
-              <KV label="When">{fmtDateTime(a.startAt, tz)}–{fmtTime(a.endAt, tz)} ({minutes} min)</KV>
+              <KV label="When">{a.timeSet ? <>{apptRange(a, tz)} ({minutes} min)</> : <>{apptRange(a, tz)} — set a time with “Move” below</>}</KV>
               <KV label="Type">{a.kind === "FOLLOW_UP_VISIT" ? "Follow-up visit" : "Appointment"}</KV>
               <KV label="Location">{a.location}</KV>
               <KV label="Rep">{a.rep.name}</KV>

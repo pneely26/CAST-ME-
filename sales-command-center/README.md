@@ -3,13 +3,36 @@
 A shared workspace for a **coordinator** and their **sales rep(s)**: leads, territories, weekly route plans, appointments and reschedules, visit feedback, follow-ups, sales, reports, notifications, and lead import from screenshots or CSV files. Everything lives in one database, so a visit recorded on a phone shows up on the coordinator's dashboard, the lead's history, the calendar and the reports at the same time.
 
 - **Coordinator:** sees everything and manages leads, territories, schedules, users and settings. Approves reschedules.
-- **Sales rep:** sees only their own leads, schedule, visits and sales. Records visits from the phone and *requests* schedule changes.
+- **Sales rep:** sees only their own leads, schedule, visits and sales. A rep:
+  - **records visits and feedback** from the phone, and *requests* schedule changes.
+  - **can't change lead details or notes** (contact info, status and so on), and can't pick a lead's status on a visit; the automatic rule sets it.
+  - **can't export anything.**
 
 Permissions are enforced on the server for every page, action and export; hiding a button is never the only protection.
 
 ---
 
-## Quick start
+## Try it online: phone or any computer, nothing to install
+
+1. Open **https://render.com/deploy?repo=https://github.com/pneely26/CAST-ME-** and sign in to Render with GitHub. Allow Render to access this repository.
+2. Fill in the two blanks:
+   - **BOOTSTRAP_ADMIN_EMAIL**: the email you'll sign in with.
+   - **BOOTSTRAP_ADMIN_PASSWORD**: at least 10 characters.
+3. Tap **Apply**. Render creates the database, builds the app and starts it, which takes about 5–10 minutes.
+4. Open the `https://sales-command-center-….onrender.com` address Render shows and sign in.
+   - **Your login:** your email and password. You see the coordinator view.
+   - **Demo rep login:** `demo-rep@example.com` with the **same password**. Open it on your phone to see the rep's view.
+
+Demo leads, visits and sales are loaded so there's something to click; all of it is marked "Demo". To start clean, use Settings → **Remove demo data**, and deactivate the demo rep in Settings → Users.
+
+Free-plan limits:
+- The app sleeps after 15 minutes without use, so the next visit takes about a minute to wake it.
+- Render's free database expires after 30 days.
+- Uploaded files are lost when the app restarts.
+
+That's fine for trying it out. For real use, upgrade the plan or follow **Deployment** below.
+
+## Quick start (your own computer)
 
 You need **Node.js 20+** and **PostgreSQL 14+** running locally (on a Mac, [Postgres.app](https://postgresapp.com) is the easiest).
 
@@ -106,6 +129,15 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
    - Values that aren't visible are left blank, never guessed.
    - With no provider configured, the page says so and you add each lead by hand while viewing the image.
 3. CSV columns are matched to lead fields by their names. You can change the matching.
+   - **Appointment-log exports** (columns like `APPTDATE, PN, COMPANY, …, Combo23, Text129`) are recognized automatically:
+     - **`PN`** becomes the lead's **Prospect / account #**. Rows with the same number become one lead with several appointments.
+     - **`APPTDATE`** becomes an appointment on that date, with the time shown as "time not set". The file has no times.
+       - **Past dates** are treated as held appointments: marked **Completed** and recorded as a **visit**, so the lead shows "Last visited" and moves to **Visited**. The visit's outcome is "Other" with a note that the file doesn't say what happened; no feedback is made up. Rows the file marks canceled or no-show are kept that way and aren't counted as visits.
+       - **Today or later** stays an upcoming appointment with the file's status.
+     - **`Text129`** (CONFIRMED) becomes the appointment's status.
+     - **`Combo23`** is matched to a rep login with the same name ("Mozzano, Louis" → Louis Mozzano); otherwise the import's default rep is used.
+   - Columns that aren't matched to a field (BC, Region, Text133, …) are kept on the lead under **Details from import**, exactly as written.
+   - Importing an updated export later fills in what's new and adds new appointments. It never duplicates leads or appointments.
 4. **Review:**
    - Correct values. Missing, invalid and low-confidence values are flagged.
    - Possible duplicates are shown side by side with the existing lead.

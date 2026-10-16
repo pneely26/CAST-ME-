@@ -8,7 +8,7 @@ import { Badge, Empty, Flash, PageHeader, Section } from "@/components/ui";
 import { OutcomeBadge } from "@/components/badges";
 import { RangePicker } from "@/components/RangePicker";
 import { INTEREST_LABEL, VISIT_OUTCOMES, VISIT_OUTCOME_LABEL, VISIT_TYPE_LABEL } from "@/lib/labels";
-import { fmtDateTime, resolveRange } from "@/lib/time";
+import { fmtDateTime, resolveRange, visitDateTime } from "@/lib/time";
 
 export const metadata = { title: "Visits & Feedback" };
 
@@ -23,7 +23,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   const qs = new URLSearchParams({ ...keep, range: range.preset, ...(range.preset === "custom" ? { from: range.startKey, to: range.endKey } : {}) }).toString();
   return (
     <div className="space-y-4">
-      <PageHeader title={isCoord ? "Visits & Feedback" : "My Visits"} subtitle={`${visits.length} visit record(s) · ${range.label}`} actions={<a className="btn-secondary" href={`/api/export/visits?${qs}`}>Export CSV</a>} />
+      <PageHeader title={isCoord ? "Visits & Feedback" : "My Visits"} subtitle={`${visits.length} visit record(s) · ${range.label}`} actions={isCoord ? <a className="btn-secondary" href={`/api/export/visits?${qs}`}>Export CSV</a> : undefined} />
       <Flash message={sp(params, "msg")} />
       <RangePicker range={range} basePath="/visits" extra={keep} />
       <form method="get" className="card grid grid-cols-2 gap-3 p-3 md:grid-cols-5">
@@ -46,7 +46,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                   <OutcomeBadge o={v.outcome} />
                   <Badge tone="neutral">{VISIT_TYPE_LABEL[v.type]}</Badge>
                   {v.interestLevel && <Badge tone="muted">Interest: {INTEREST_LABEL[v.interestLevel]}</Badge>}
-                  <span className="text-xs text-muted">{fmtDateTime(v.visitAt, tz)}{isCoord ? ` · ${v.rep.name}` : ""}{v.lead.area ? ` · ${v.lead.area.name}` : ""}</span>
+                  <span className="text-xs text-muted">{visitDateTime(v, tz)}{isCoord ? ` · ${v.rep.name}` : ""}{v.lead.area ? ` · ${v.lead.area.name}` : ""}</span>
                 </div>
                 {v.feedback && <p className="mt-1 whitespace-pre-line text-sm">{v.feedback}</p>}
                 {v.objections && <p className="mt-1 text-sm text-ink-2"><span className="text-xs text-muted">Objections: </span>{v.objections}</p>}

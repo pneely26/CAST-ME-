@@ -87,14 +87,14 @@ async function decideRecordActionInner(_: unknown, fd: FormData): Promise<Action
     let message = "";
     if (decision === "save") message = "Corrections saved";
     else if (decision === "create" || decision === "create-duplicate") {
-      const lead = await svc.importAsNew(actor, recordId, defaults(fd), decision === "create-duplicate");
-      message = `Created lead #${lead.leadNumber} ${lead.businessName}`;
+      const res = await svc.importAsNew(actor, recordId, defaults(fd), decision === "create-duplicate");
+      message = `${res.merged ? "Added to existing lead" : "Created lead"} #${res.lead.leadNumber} ${res.lead.businessName}${res.note ? ` · ${res.note}` : ""}`;
     } else if (decision?.startsWith("merge:")) {
       const leadId = decision.slice(6);
       if (!/^[a-z0-9]{10,40}$/i.test(leadId)) throw new Error("Invalid lead");
-      const r = await svc.mergeInto(actor, recordId, leadId);
+      const r = await svc.mergeInto(actor, recordId, leadId, defaults(fd));
       message = r.filled.length ? `Merged — filled ${r.filled.join(", ")}` : "Merged — the lead already had this information";
-      if (r.kept.length) message += `; kept the lead's existing ${r.kept.join(", ")}`;
+      if (r.note) message += ` · ${r.note}`;
     } else if (decision === "skip") {
       await svc.skipRecords(actor, [recordId]);
       message = "Row skipped";
@@ -135,7 +135,7 @@ async function importCleanActionInner(_: unknown, fd: FormData): Promise<ActionR
     const actor = await actorOrThrow();
     const r = await svc.importCleanRows(actor, id(fd, "batchId"), defaults(fd));
     done();
-    const summary = `Imported ${r.imported} clean row(s). ${r.left} left for review${r.duplicates ? ` (${r.duplicates} matched an existing lead)` : ""}.`;
+    const summary = `Created ${r.imported} new lead(s)${r.merged ? `, updated ${r.merged} existing lead(s)` : ""}${r.appointments ? `, added ${r.appointments} appointment(s)` : ""}. ${r.left} left for review${r.duplicates ? ` (${r.duplicates} matched an existing lead)` : ""}.`;
     if (r.failed) return { ok: false, error: `${summary} ${r.failed} failed: ${r.errors.slice(0, 3).join(" · ")}` };
     return { ok: true, data: undefined, message: summary, redirect: backTo(fd, summary) };
   } catch (e) {

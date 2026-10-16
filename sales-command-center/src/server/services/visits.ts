@@ -125,7 +125,8 @@ export async function recordVisit(actor: Actor, raw: VisitInput, attachment?: St
     }
 
     const suggested = suggestStatusAfterVisit(lead.status, { type: d.type, outcome: d.outcome, hasFollowUp: Boolean(d.followUpAction), bookedAppointment: Boolean(bookedId) });
-    const target = d.newStatus ?? suggested;
+    // only the coordinator can pick a different status; for reps the automatic rule applies
+    const target = (isCoordinator(actor) ? d.newStatus : null) ?? suggested;
     if (target !== lead.status) await changeLeadStatusInTx(tx, actor, lead.id, target);
 
     await refreshLeadRollups(tx, lead.id);

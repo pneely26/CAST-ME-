@@ -45,7 +45,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         subtitle={`${total} lead${total === 1 ? "" : "s"}${view !== "all" ? ` · ${viewLabel(view, BUILT_IN_VIEWS.find((v) => v.key === view)?.label ?? "")}` : ""}`}
         actions={
           <>
-            <a className="btn-secondary" href={`/api/export/leads?${currentQuery}`}>Export CSV</a>
+            {isCoord && <a className="btn-secondary" href={`/api/export/leads?${currentQuery}`}>Export CSV</a>}
             {isCoord && <Link href="/import" className="btn-secondary">Import</Link>}
             {isCoord && <Link href="/leads/new" className="btn-primary">New lead</Link>}
           </>

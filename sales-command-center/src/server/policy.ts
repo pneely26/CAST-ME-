@@ -19,6 +19,8 @@ export type Permission =
   | "lead.bulk"
   | "lead.import"
   | "lead.exportAll"
+  | "lead.edit"
+  | "data.export"
   | "territory.manage"
   | "schedule.manageAll"
   | "appointment.moveDirect"
@@ -40,6 +42,8 @@ const COORDINATOR_ONLY: Permission[] = [
   "lead.bulk",
   "lead.import",
   "lead.exportAll",
+  "lead.edit",
+  "data.export",
   "territory.manage",
   "schedule.manageAll",
   "appointment.moveDirect",

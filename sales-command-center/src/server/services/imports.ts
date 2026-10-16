@@ -7,7 +7,13 @@ import { AppError, conflict, invalid, notFound } from "../errors";
 import { readStored, saveUpload, type StoredFile } from "../storage";
 import { getExtractionProvider } from "../extraction";
 import { checkDuplicates, createLead, updateLead } from "./leads";
-import { IMPORT_FIELDS, applyMapping, autoMapHeaders, hasBlockingFlag, isClean, reviewFlags, type ImportConfidence, type ImportField, type ImportValues } from "@/lib/domain/imports";
+import { notify } from "./notifications";
+import { refreshLeadRollups } from "./rollups";
+import { getSettings } from "../settings";
+import type { Tx } from "../db";
+import { IMPORT_FIELDS, applyMapping, autoMapHeaders, detectPreset, hasBlockingFlag, isClean, normalizePersonName, parseApptStatus, parseLooseDate, parseLooseTime, reviewFlags, unmappedDetails, type ImportConfidence, type ImportField, type ImportValues } from "@/lib/domain/imports";
+import { advanceStatus } from "@/lib/domain/rollups";
+import { dateKeyInTz, dayRangeUtc, fmtDateKey, fmtClock, zonedToUtc } from "@/lib/time";
 import { normalizeBusinessName, normalizePhone } from "@/lib/normalize";
 
 const MAX_IMAGES = 30;
@@ -109,7 +115,7 @@ export async function createCsvBatch(actor: Actor, file: File) {
   if (!parsed.data.length) throw invalid("That CSV has a header row but no data rows.");
   const mapping = autoMapHeaders(headers);
   return prisma.$transaction(async (tx) => {
-    const batch = await tx.importBatch.create({ data: { kind: "CSV", createdById: actor.id, provider: "CSV", notes: JSON.stringify({ fileName: file.name.slice(0, 200), headers, mapping }) } });
+    const batch = await tx.importBatch.create({ data: { kind: "CSV", createdById: actor.id, provider: "CSV", notes: JSON.stringify({ fileName: file.name.slice(0, 200), headers, mapping, preset: detectPreset(headers) }) } });
     await tx.importRecord.createMany({
       data: parsed.data.map((row, i) => ({ batchId: batch.id, rowNumber: i + 1, sourceText: JSON.stringify(row), extracted: applyMapping(row, mapping) as Prisma.InputJsonValue })),
     });
@@ -118,7 +124,7 @@ export async function createCsvBatch(actor: Actor, file: File) {
   });
 }
 
-export function csvMeta(batch: { kind: string; notes: string | null }): { fileName: string; headers: string[]; mapping: Record<string, ImportField | ""> } | null {
+export function csvMeta(batch: { kind: string; notes: string | null }): { fileName: string; headers: string[]; mapping: Record<string, ImportField | "">; preset?: string | null } | null {
   if (batch.kind !== "CSV" || !batch.notes) return null;
   try {
     return JSON.parse(batch.notes);
@@ -161,22 +167,49 @@ export async function getBatchForReview(actor: Actor, batchId: string, opts: { v
     include: { createdBy: { select: { name: true } }, images: { orderBy: { createdAt: "asc" } }, records: { orderBy: [{ rowNumber: "asc" }, { createdAt: "asc" }], include: { lead: { select: { id: true, businessName: true, leadNumber: true } } } } },
   });
   if (!batch) throw notFound("Import");
+  const meta = csvMeta(batch);
+  const reps = await activeReps();
+  const todayKey = dateKeyInTz(new Date(), (await getSettings()).timezone);
+  const pending = batch.records.filter((r) => r.status === "PENDING");
+  // rows that share a prospect / account # are the same business: the first creates the lead, the rest add to it
+  const groupLeader = new Map<string, number>();
+  for (const r of batch.records) {
+    const x = recordValues(r).externalId;
+    if (x && !groupLeader.has(x)) groupLeader.set(x, r.rowNumber ?? 0);
+  }
+  const extIds = [...new Set(pending.map((r) => recordValues(r).externalId).filter((x): x is string => !!x))];
+  const existingByExt = new Map(
+    (extIds.length ? await prisma.lead.findMany({ where: { externalId: { in: extIds } }, select: { id: true, leadNumber: true, businessName: true, externalId: true } }) : []).map((l) => [l.externalId!, l]),
+  );
   const keyCount = new Map<string, number>();
-  const keys = (v: ImportValues) => [v.businessName ? "n:" + normalizeBusinessName(v.businessName) : "", normalizePhone(v.phone).length >= 7 ? "p:" + normalizePhone(v.phone) : ""].filter(Boolean);
-  for (const r of batch.records) if (r.status === "PENDING") for (const k of keys(recordValues(r))) keyCount.set(k, (keyCount.get(k) ?? 0) + 1);
+  const keys = (v: ImportValues) => (v.externalId ? [] : [v.businessName ? "n:" + normalizeBusinessName(v.businessName) : "", normalizePhone(v.phone).length >= 7 ? "p:" + normalizePhone(v.phone) : ""].filter(Boolean));
+  for (const r of pending) for (const k of keys(recordValues(r))) keyCount.set(k, (keyCount.get(k) ?? 0) + 1);
   const all = batch.records.map((r) => {
     const values = recordValues(r);
     const flags = reviewFlags(values, r.confidence as ImportConfidence | null);
-    if (r.status === "PENDING" && keys(values).some((k) => (keyCount.get(k) ?? 0) > 1)) flags.push({ level: "warn", message: "Another row in this import looks like the same business" });
-    if (r.status === "PENDING" && r.error) flags.push({ level: "warn", message: r.error });
-    return { ...r, values, flags, clean: r.status === "PENDING" && isClean(flags) && !flags.some((f) => f.message.startsWith("Another row")) && !r.error };
+    const idMatch = values.externalId ? (existingByExt.get(values.externalId) ?? null) : null;
+    const leaderRow = values.externalId ? groupLeader.get(values.externalId) : undefined;
+    const follower = !!values.externalId && !idMatch && leaderRow !== undefined && leaderRow !== (r.rowNumber ?? 0);
+    const rep = matchRep(values.repName, reps);
+    if (r.status === "PENDING") {
+      if (idMatch) flags.push({ level: "info", message: `Same prospect # as existing lead #${idMatch.leadNumber} ${idMatch.businessName} — it will be updated (empty fields filled, appointment added), not duplicated` });
+      else if (follower) flags.push({ level: "info", message: `Same prospect # as row ${leaderRow} — added to the same lead, not created twice` });
+      if (values.repName && !rep) flags.push({ field: "repName", level: "info", message: `“${values.repName}” isn't a sales rep login in this app — the lead gets the default rep chosen below. Add them in Settings → Users to match automatically.` });
+      if (keys(values).some((k) => (keyCount.get(k) ?? 0) > 1)) flags.push({ level: "warn", message: "Another row in this import looks like the same business" });
+      if (r.error) flags.push({ level: "warn", message: r.error });
+      const day = parseLooseDate(values.appointmentDate);
+      const st = parseApptStatus(values.appointmentStatus);
+      if (day && day < todayKey && st !== "CANCELED" && st !== "NO_SHOW") flags.push({ field: "appointmentDate", level: "info", message: "Past appointment — imported as held (Completed) and counted as a visit" });
+    }
+    const details = meta && r.sourceText ? unmappedDetails(JSON.parse(r.sourceText), meta.mapping) : {};
+    return { ...r, values, flags, details, idMatch, follower, rep, clean: r.status === "PENDING" && isClean(flags) && !flags.some((f) => f.message.startsWith("Another row")) && !r.error };
   });
-  // Check against existing leads up front for normal-sized imports so "Ready" means ready; very large CSVs are checked per page.
-  const pendingRows = all.filter((r) => r.status === "PENDING" && r.values.businessName);
-  const fullCheck = pendingRows.length <= 300;
+  // Check against existing leads up front for normal-sized imports so "Ready" means ready; very large files are checked per page.
+  const pendingRows = all.filter((r) => r.status === "PENDING" && r.values.businessName && !r.idMatch && !r.follower);
+  const fullCheck = pendingRows.length <= 1000;
   const dupMap = new Map<string, Awaited<ReturnType<typeof checkDuplicates>>>();
   const lookup = async (r: (typeof all)[number]) => {
-    if (!dupMap.has(r.id)) dupMap.set(r.id, r.status === "PENDING" && r.values.businessName ? (await checkDuplicates(r.values)).slice(0, 3) : []);
+    if (!dupMap.has(r.id)) dupMap.set(r.id, r.status === "PENDING" && r.values.businessName && !r.idMatch && !r.follower ? (await checkDuplicates(r.values)).slice(0, 3) : []);
     return dupMap.get(r.id)!;
   };
   if (fullCheck) for (const r of pendingRows) if ((await lookup(r)).length) r.clean = false;
@@ -257,32 +290,132 @@ function sourceLabel(kind: string, defaults: ImportDefaults) {
   return defaults.source || (kind === "CSV" ? "CSV import" : "Screenshot import");
 }
 
-/** Create a new lead from a row. A suspected duplicate is refused unless `allowDuplicate` (an explicit reviewer choice). */
-export async function importAsNew(actor: Actor, recordId: string, defaults: ImportDefaults = {}, allowDuplicate = false) {
+type RepLite = { id: string; name: string };
+
+async function activeReps(): Promise<RepLite[]> {
+  return prisma.user.findMany({ where: { role: "REP", active: true }, select: { id: true, name: true } });
+}
+
+/** Match a rep name from a file ("Mozzano, Louis" or "Louis Mozzano") to an active rep login. Exact name only — never guessed. */
+function matchRep(name: string | null | undefined, reps: RepLite[]): RepLite | null {
+  const n = normalizePersonName(name);
+  if (!n) return null;
+  const hits = reps.filter((r) => normalizePersonName(r.name) === n);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+const leadFields = (v: ImportValues) => ({
+  businessName: v.businessName!,
+  contactName: v.contactName,
+  jobTitle: v.jobTitle,
+  phone: v.phone,
+  email: v.email,
+  address: v.address,
+  city: v.city,
+  state: v.state,
+  zip: v.zip,
+  industry: v.industry,
+  notes: v.notes,
+  externalId: v.externalId,
+  employeeCount: v.employeeCount ? v.employeeCount.replace(/[,\s]/g, "") : null,
+});
+
+function rowDetails(r: { sourceText: string | null }, batch: { kind: string; notes: string | null }): Record<string, string> | null {
+  const meta = csvMeta(batch);
+  if (!meta || !r.sourceText) return null;
+  const d = unmappedDetails(JSON.parse(r.sourceText), meta.mapping);
+  return Object.keys(d).length ? d : null;
+}
+
+/**
+ * Add the row's appointment to a lead. Imported appointments keep the file's date (and time, if it has one;
+ * otherwise the time is "not set"). Skips if the lead already has an appointment that day.
+ * - Past dates are appointments that were held: marked Completed and recorded as a visit
+ *   (outcome "Other", no feedback invented), unless the file says canceled / no-show.
+ * - Today and later: the file's status (Confirmed / Scheduled).
+ * No notifications: these are records from another system, not new bookings.
+ */
+async function addImportedAppointment(tx: Tx, actor: Actor, leadId: string, repId: string | null, v: ImportValues, label: string): Promise<string | null> {
+  const day = parseLooseDate(v.appointmentDate);
+  if (!day) return null;
+  const settings = await getSettings(tx);
+  const tz = settings.timezone;
+  const when = `${fmtDateKey(day)}${v.appointmentTime ? ` ${fmtClock(parseLooseTime(v.appointmentTime))}` : ""}`;
+  if (!repId) return `Appointment on ${when} not added — no sales rep (choose a default rep and import again)`;
+  const { start, end } = dayRangeUtc(day, day, tz);
+  if (await tx.appointment.findFirst({ where: { leadId, startAt: { gte: start, lt: end } }, select: { id: true } })) return `Appointment on ${when} was already on this lead`;
+  const time = parseLooseTime(v.appointmentTime);
+  const startAt = time ? zonedToUtc(day, time, tz) : start;
+  const endAt = time ? new Date(startAt.getTime() + settings.defaultAppointmentMinutes * 60_000) : end;
+  const fileStatus = parseApptStatus(v.appointmentStatus) ?? "SCHEDULED";
+  const past = day < dateKeyInTz(new Date(), tz);
+  const status = past && !["CANCELED", "NO_SHOW"].includes(fileStatus) ? "COMPLETED" : fileStatus;
+  const lead = await tx.lead.findUniqueOrThrow({ where: { id: leadId } });
+  const appt = await tx.appointment.create({
+    data: { leadId, repId, startAt, endAt, timeSet: !!time, status, location: [lead.address, lead.city].filter(Boolean).join(", ") || null, notes: `Imported from ${label}`, createdById: actor.id, ...(status === "CANCELED" ? { canceledAt: new Date() } : {}) },
+  });
+  await tx.appointmentChange.create({ data: { appointmentId: appt.id, action: "CREATED", toStart: startAt, toEnd: endAt, changedById: actor.id, reason: `Imported from ${label}` } });
+  await audit(tx, actor, "appointment.imported", { type: "Appointment", id: appt.id, leadId }, `Appointment on ${when}${time ? "" : " (time not set)"} imported from ${label} — ${status === "COMPLETED" ? "held (past), recorded as a visit" : `status ${status.toLowerCase().replace("_", " ")}`}`);
+  if (status === "COMPLETED") {
+    await tx.appointmentChange.create({ data: { appointmentId: appt.id, action: "COMPLETED", fromStart: startAt, fromEnd: endAt, changedById: actor.id, reason: `Past appointment imported from ${label}` } });
+    await tx.visit.create({
+      data: { leadId, repId, visitAt: startAt, timeSet: !!time, type: "SCHEDULED_APPOINTMENT", outcome: "OTHER", appointmentId: appt.id, notes: `Appointment held — imported from ${label}. The file doesn't record what happened at the appointment.` },
+    });
+  }
+  // move the lead along like a booking or visit would (closed statuses are never changed)
+  const target = status === "COMPLETED" ? "VISITED" : ["SCHEDULED", "CONFIRMED"].includes(status) && !past ? "APPOINTMENT_SCHEDULED" : null;
+  const next = target ? advanceStatus(lead.status, target) : lead.status;
+  if (next !== lead.status) await tx.lead.update({ where: { id: leadId }, data: { status: next, version: { increment: 1 } } });
+  await refreshLeadRollups(tx, leadId);
+  return `Appointment added: ${when}${time ? "" : " (time not set)"}, ${status === "COMPLETED" ? "held — counted as a visit" : status.toLowerCase().replace("_", " ")}`;
+}
+
+async function batchLabel(batchId: string) {
+  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: batchId } });
+  return { batch, label: csvMeta(batch)?.fileName ?? (batch.kind === "CSV" ? "CSV import" : "screenshot import") };
+}
+
+/**
+ * Create a new lead from a row. A suspected duplicate (similar name/phone/address) is refused unless
+ * `allowDuplicate` (an explicit reviewer choice). A row whose prospect / account # already belongs to a
+ * lead is added to that lead instead of creating a second one.
+ */
+export async function importAsNew(actor: Actor, recordId: string, defaults: ImportDefaults = {}, allowDuplicate = false, opts: { quiet?: boolean } = {}) {
   can(actor);
   const r = await pendingRecord(recordId);
   const v = recordValues(r);
   const flags = reviewFlags(v, r.confidence as ImportConfidence | null);
   if (hasBlockingFlag(flags)) throw invalid(flags.filter((f) => f.level === "error").map((f) => f.message).join(" · "));
-  const batch = await prisma.importBatch.findUniqueOrThrow({ where: { id: r.batchId } });
+  const { batch, label } = await batchLabel(r.batchId);
+  if (v.externalId) {
+    const existing = await prisma.lead.findUnique({ where: { externalId: v.externalId } });
+    if (existing) {
+      const m = await mergeInto(actor, recordId, existing.id, defaults);
+      return { lead: existing, merged: true as const, note: m.note };
+    }
+  }
+  const repId = matchRep(v.repName, await activeReps())?.id ?? defaults.assignedRepId ?? null;
   const lead = await createLead(
     actor,
-    { businessName: v.businessName!, contactName: v.contactName, jobTitle: v.jobTitle, phone: v.phone, email: v.email, address: v.address, city: v.city, state: v.state, zip: v.zip, industry: v.industry, notes: v.notes, source: sourceLabel(batch.kind, defaults), assignedRepId: defaults.assignedRepId || null, areaId: defaults.areaId || null },
-    { allowDuplicate, source: `${batch.kind === "CSV" ? "CSV" : "screenshot"} import` },
+    { ...leadFields(v), source: sourceLabel(batch.kind, defaults), assignedRepId: repId, areaId: defaults.areaId || null },
+    { allowDuplicate, source: `${batch.kind === "CSV" ? "CSV" : "screenshot"} import`, sourceDetails: rowDetails(r, batch), quiet: opts.quiet },
   );
-  const res = await prisma.importRecord.updateMany({ where: { id: r.id, status: "PENDING" }, data: { status: "IMPORTED", leadId: lead.id, error: null } });
+  const note = await prisma.$transaction((tx) => addImportedAppointment(tx, actor, lead.id, repId, v, label));
+  const res = await prisma.importRecord.updateMany({ where: { id: r.id, status: "PENDING" }, data: { status: "IMPORTED", leadId: lead.id, error: note } });
   if (!res.count) throw conflict("This row was handled by someone else at the same time.");
-  return lead;
+  return { lead, merged: false as const, note };
 }
 
 /**
  * Merge a row into an existing lead: fills only fields that are empty on the lead (never overwrites),
- * and appends the row's notes verbatim under a dated heading. Returns which fields were filled.
+ * appends the row's notes verbatim under a dated heading, adds file details the lead doesn't have yet,
+ * and adds the row's appointment. Returns which fields were filled.
  */
-export async function mergeInto(actor: Actor, recordId: string, leadId: string) {
+export async function mergeInto(actor: Actor, recordId: string, leadId: string, defaults: ImportDefaults = {}) {
   can(actor);
   const r = await pendingRecord(recordId);
   const v = recordValues(r);
+  const { batch, label } = await batchLabel(r.batchId);
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!lead) throw notFound("Lead");
   const patch: Record<string, string> = {};
@@ -293,14 +426,27 @@ export async function mergeInto(actor: Actor, recordId: string, leadId: string) 
     if (!lead[f]) patch[f] = incoming;
     else if (lead[f]!.trim().toLowerCase() !== incoming.trim().toLowerCase()) skipped.push(f);
   }
+  const fields = leadFields(v);
+  if (fields.employeeCount && lead.employeeCount === null) patch.employeeCount = fields.employeeCount;
+  if (v.externalId && !lead.externalId && !(await prisma.lead.findUnique({ where: { externalId: v.externalId } }))) patch.externalId = v.externalId;
   if (v.notes) patch.notes = lead.notes ? `${lead.notes}\n\n— Imported ${new Date().toISOString().slice(0, 10)} —\n${v.notes}` : v.notes;
   if (Object.keys(patch).length) await updateLead(actor, lead.id, patch, lead.version);
-  await prisma.$transaction(async (tx) => {
-    const res = await tx.importRecord.updateMany({ where: { id: r.id, status: "PENDING" }, data: { status: "MERGED", leadId: lead.id, error: skipped.length ? `Kept the lead's existing ${skipped.join(", ")} (import had different values)` : null } });
+  const incomingDetails = rowDetails(r, batch) ?? {};
+  const current = (lead.sourceDetails as Record<string, string> | null) ?? {};
+  const newDetails = Object.fromEntries(Object.entries(incomingDetails).filter(([k]) => !(k in current)));
+  const repId = lead.assignedRepId ?? matchRep(v.repName, await activeReps())?.id ?? defaults.assignedRepId ?? null;
+  const note = await prisma.$transaction(async (tx) => {
+    if (Object.keys(newDetails).length) await tx.lead.update({ where: { id: lead.id }, data: { sourceDetails: { ...current, ...newDetails }, version: { increment: 1 } } });
+    const apptNote = await addImportedAppointment(tx, actor, lead.id, repId, v, label);
+    const kept = skipped.length ? `Kept the lead's existing ${skipped.join(", ")} (import had different values)` : null;
+    const n = [apptNote, kept].filter(Boolean).join(" · ") || null;
+    const res = await tx.importRecord.updateMany({ where: { id: r.id, status: "PENDING" }, data: { status: "MERGED", leadId: lead.id, error: n } });
     if (!res.count) throw conflict("This row was handled by someone else at the same time.");
-    await audit(tx, actor, "import.merged", { type: "Lead", id: lead.id, leadId: lead.id }, `Merged import row into this lead${Object.keys(patch).length ? ` (filled ${Object.keys(patch).join(", ")})` : " (no new information)"}`);
+    const filled = [...Object.keys(patch), ...(Object.keys(newDetails).length ? ["file details"] : [])];
+    await audit(tx, actor, "import.merged", { type: "Lead", id: lead.id, leadId: lead.id }, `Merged import row into this lead${filled.length ? ` (filled ${filled.join(", ")})` : " (no new information)"}${apptNote ? ` · ${apptNote}` : ""}`);
+    return n;
   });
-  return { filled: Object.keys(patch), kept: skipped };
+  return { filled: Object.keys(patch), kept: skipped, note };
 }
 
 export async function skipRecords(actor: Actor, recordIds: string[]) {
@@ -316,13 +462,16 @@ export async function restoreRecord(actor: Actor, recordId: string) {
 }
 
 /**
- * Import every clean row (no errors, no low-confidence values, no in-batch twin). A row that turns
- * out to match an existing lead is not created — it stays pending with the match noted for review.
+ * Import every clean row (no errors, no low-confidence values, no unresolved twin). Rows with the same
+ * prospect / account # become one lead with several appointments. A row that turns out to match an
+ * existing lead by name/phone/address is not created — it stays pending with the match noted for review.
+ * Reps get one summary notification instead of one per lead.
  */
 export async function importCleanRows(actor: Actor, batchId: string, defaults: ImportDefaults = {}) {
   can(actor);
   const { all } = await getBatchForReview(actor, batchId, { pageSize: 1 });
-  const out = { imported: 0, duplicates: 0, failed: 0, left: 0, errors: [] as string[] };
+  const out = { imported: 0, merged: 0, appointments: 0, duplicates: 0, failed: 0, left: 0, errors: [] as string[] };
+  const assigned = new Map<string, number>();
   for (const r of all) {
     if (r.status !== "PENDING") continue;
     if (!r.clean) {
@@ -330,8 +479,13 @@ export async function importCleanRows(actor: Actor, batchId: string, defaults: I
       continue;
     }
     try {
-      await importAsNew(actor, r.id, defaults, false);
-      out.imported++;
+      const res = await importAsNew(actor, r.id, defaults, false, { quiet: true });
+      if (res.merged) out.merged++;
+      else {
+        out.imported++;
+        if (res.lead.assignedRepId) assigned.set(res.lead.assignedRepId, (assigned.get(res.lead.assignedRepId) ?? 0) + 1);
+      }
+      if (res.note?.startsWith("Appointment added")) out.appointments++;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "failed";
       if (e instanceof AppError && e.code === "CONFLICT") {
@@ -345,7 +499,12 @@ export async function importCleanRows(actor: Actor, batchId: string, defaults: I
     }
   }
   await maybeComplete(batchId);
-  await prisma.auditLog.create({ data: { actorId: actor.id, action: "import.bulk", entityType: "ImportBatch", entityId: batchId, summary: `Imported ${out.imported} clean row(s); ${out.left} left for review (${out.duplicates} possible duplicate(s)); ${out.failed} failed` } });
+  if (assigned.size) {
+    await prisma.$transaction(async (tx) => {
+      for (const [repId, n] of assigned) await notify(tx, repId, { type: "LEAD_ASSIGNED", title: `${n} new lead${n === 1 ? "" : "s"} assigned to you from an import`, link: "/leads?view=mine", dedupeKey: `import-assign:${batchId}:${repId}:${Date.now()}` });
+    });
+  }
+  await prisma.auditLog.create({ data: { actorId: actor.id, action: "import.bulk", entityType: "ImportBatch", entityId: batchId, summary: `Imported ${out.imported} new lead(s), updated ${out.merged} existing lead(s), added ${out.appointments} appointment(s); ${out.left} left for review (${out.duplicates} possible duplicate(s)); ${out.failed} failed` } });
   return out;
 }
 

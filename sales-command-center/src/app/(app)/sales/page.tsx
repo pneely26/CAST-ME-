@@ -9,7 +9,7 @@ import { OppStatusBadge } from "@/components/badges";
 import { RangePicker } from "@/components/RangePicker";
 import { summarizeSales } from "@/lib/domain/sales";
 import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, PAYMENT_STATUS_LABEL, money, pct } from "@/lib/labels";
-import { fmtDate, resolveRange } from "@/lib/time";
+import { fmtDate, resolveRange, fmtDateKey } from "@/lib/time";
 
 export const metadata = { title: "Sales" };
 
@@ -33,7 +33,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const Table = ({ items }: { items: typeof rows }) => (
     <div className="card overflow-x-auto">
       <table className="tbl">
-        <thead><tr><th>#</th><th>Business</th><th>Product / service</th><th>Status</th><th className="text-right">Estimated</th><th className="text-right">Final amount</th><th>Opened</th><th>Closed</th><th>Payment</th>{isCoord && <th>Rep</th>}</tr></thead>
+        <thead><tr><th>#</th><th>Business</th><th>Product / service</th><th>Status</th><th className="text-right">Estimated</th><th className="text-right">Final amount</th><th>Opened</th><th>Closed</th><th>Payment</th><th>Signed 44</th><th>Run date</th><th>GO status</th><th>Called to desk</th>{isCoord && <th>Rep</th>}</tr></thead>
         <tbody>
           {items.map((o) => (
             <tr key={o.id}>
@@ -46,6 +46,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               <td className="whitespace-nowrap">{fmtDate(o.openedAt, tz)}</td>
               <td className="whitespace-nowrap">{o.closedAt ? fmtDate(o.closedAt, tz) : "—"}</td>
               <td>{o.status === "WON" ? PAYMENT_STATUS_LABEL[o.paymentStatus] : "—"}</td>
+              <td>{o.signed44 ? "Yes" : "No"}</td>
+              <td className="whitespace-nowrap">{o.runDate ? fmtDateKey(o.runDate) : "—"}</td>
+              <td>{o.goStatus || "—"}</td>
+              <td className="whitespace-nowrap">{o.calledToDesk ? `Yes${o.tentativeRunDate ? ` · tentative ${fmtDateKey(o.tentativeRunDate)}` : ""}` : "No"}</td>
               {isCoord && <td>{o.rep.name}</td>}
             </tr>
           ))}
@@ -56,7 +60,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4">
-      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<><a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a><Link className="btn-primary" href="/sales/new">New opportunity</Link></>} />
+      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<>{isCoord && <a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a>}<Link className="btn-primary" href="/sales/new">New opportunity</Link></>} />
       <Flash message={sp(params, "msg")} />
       <RangePicker range={range} basePath="/sales" extra={keep} allowAll />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

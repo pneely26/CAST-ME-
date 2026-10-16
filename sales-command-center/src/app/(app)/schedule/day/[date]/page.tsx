@@ -12,7 +12,7 @@ import { LeadStatusBadge, PriorityBadge, ApptStatusBadge } from "@/components/ba
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { addStopsAction, resetDayAction, saveDayAction, stopAction, dayStatusAction } from "@/app/actions/schedule";
 import { ACTIVE_APPOINTMENT_STATUSES, DAY_PLAN_STATUS_LABEL } from "@/lib/labels";
-import { addDays, dateKeyInTz, dayRangeUtc, fmtDate, fmtDateKey, fmtTime, isDateKey } from "@/lib/time";
+import { addDays, dateKeyInTz, dayRangeUtc, fmtDate, fmtDateKey, fmtTime, isDateKey, apptTime } from "@/lib/time";
 
 export const metadata = { title: "Day plan" };
 
@@ -126,7 +126,7 @@ export default async function DayPage({ params, searchParams }: { params: Promis
               <ul className="divide-y divide-line-2">
                 {appointments.map((a) => (
                   <li key={a.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                    <div><Link className="font-medium hover:underline" href={`/appointments/${a.id}`}>{fmtTime(a.startAt, tz)} · {a.lead.businessName}</Link></div>
+                    <div><Link className="font-medium hover:underline" href={`/appointments/${a.id}`}>{apptTime(a, tz)} · {a.lead.businessName}</Link></div>
                     <ApptStatusBadge s={a.status} />
                   </li>
                 ))}
