@@ -1,5 +1,7 @@
 # Stewart Blind Spot
 
+> This repository also contains a separate app, **Sales Command Center** (a shared CRM for a coordinator and sales reps). See [`sales-command-center/README.md`](sales-command-center/README.md).
+
 A private, single-user research tracker that helps a SAG-AFTRA actor compare:
 
 1. **Public casting opportunities** they can see,
