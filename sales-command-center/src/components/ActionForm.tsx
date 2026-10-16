@@ -49,7 +49,22 @@ export function ActionForm({
       aria-busy={pending}
       onSubmit={(e) => {
         const needs = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("data-confirm") ?? confirm;
-        if (needs && !window.confirm(needs)) e.preventDefault();
+        if (needs && !window.confirm(needs)) {
+          e.preventDefault();
+          return;
+        }
+        // carry the clicked button's name/value (e.g. decision=merge) into the submitted FormData
+        const btn = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+        const form = e.currentTarget;
+        form.querySelectorAll("input[data-submitter]").forEach((el) => el.remove());
+        if (btn?.name) {
+          const hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = btn.name;
+          hidden.value = btn.value;
+          hidden.dataset.submitter = "1";
+          form.appendChild(hidden);
+        }
       }}
     >
       {children}
