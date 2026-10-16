@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #111827;
+  --color-ink-2: #374151;
+  --color-muted: #6b7280;
+  --color-line: #e5e7eb;
+  --color-line-2: #f0f1f3;
+  --color-canvas: #f7f7f8;
+  --color-panel: #ffffff;
+  --color-accent: #3451b2;
+  --color-accent-2: #eef1fb;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html, body { background: var(--color-canvas); color: var(--color-ink); }
+body { -webkit-font-smoothing: antialiased; }
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@layer components {
+  .input { @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:bg-line-2; }
+  .label { @apply mb-1 block text-xs font-medium text-ink-2; }
+  .btn-primary { @apply btn bg-accent text-white hover:bg-accent/90; }
+  .btn-secondary { @apply btn border border-line bg-white text-ink hover:bg-canvas; }
+  .btn-ghost { @apply btn text-ink-2 hover:bg-black/5; }
+  .btn-danger { @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50; }
+  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+  .card { @apply rounded-lg border border-line bg-panel; }
+  .tbl { @apply w-full text-left text-sm; }
+  .tbl th { @apply whitespace-nowrap border-b border-line bg-canvas/60 px-3 py-2 text-xs font-medium text-muted; }
+  .tbl td { @apply border-b border-line-2 px-3 py-2 align-top; }
+  .tbl tr:hover td { @apply bg-canvas/50; }
+  .link { @apply text-accent underline-offset-2 hover:underline; }
+}
+
+/* FullCalendar tweaks */
+.fc { --fc-border-color: var(--color-line); --fc-today-bg-color: #f3f5fd; --fc-event-border-color: transparent; font-size: 0.8rem; }
+.fc .fc-toolbar-title { font-size: 1rem; font-weight: 600; }
+.fc .fc-button { padding: 0.3rem 0.6rem; font-size: 0.8rem; text-transform: none; }
+.fc .fc-button-primary { background: #fff; color: var(--color-ink); border-color: var(--color-line); }
+.fc .fc-button-primary:not(:disabled).fc-button-active, .fc .fc-button-primary:not(:disabled):active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.fc .fc-event { cursor: pointer; }
+.fc-event.is-canceled { opacity: 0.55; text-decoration: line-through; }
+.fc-event.is-followup { border-left: 3px dashed #b45309 !important; }

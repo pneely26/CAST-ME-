@@ -1,0 +1,665 @@
+// Sales Rep Command Center — one shared database for every module.
+// Business details live only on Lead; every other table references it.
+// Lead "rollup" columns (lastVisitAt, nextFollowUpAt, …) are caches recomputed from the
+// source tables inside the same transaction as each change (see src/server/services/rollups.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  COORDINATOR
+  REP
+}
+
+enum LeadPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum LeadStatus {
+  NEW
+  READY_TO_CONTACT
+  CONTACT_ATTEMPTED
+  APPOINTMENT_REQUESTED
+  APPOINTMENT_SCHEDULED
+  VISITED
+  FOLLOW_UP_REQUIRED
+  INTERESTED
+  OPPORTUNITY_IN_PROGRESS
+  WON
+  LOST
+  NOT_A_FIT
+  DO_NOT_CONTACT
+}
+
+enum VisitType {
+  WALK_IN
+  SCHEDULED_APPOINTMENT
+  FOLLOW_UP
+  PHONE_CALL
+  OTHER
+}
+
+enum VisitOutcome {
+  DECISION_MAKER_UNAVAILABLE
+  LEFT_INFORMATION
+  SPOKE_WITH_DECISION_MAKER
+  INTERESTED
+  REQUESTED_CALLBACK
+  APPOINTMENT_BOOKED
+  NOT_INTERESTED
+  NO_ACCESS
+  BUSINESS_CLOSED
+  SALE_COMPLETED
+  OTHER
+}
+
+enum InterestLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AppointmentKind {
+  APPOINTMENT
+  FOLLOW_UP_VISIT
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELED
+  NO_SHOW
+}
+
+enum AppointmentChangeAction {
+  CREATED
+  EDITED
+  MOVED
+  CANCELED
+  COMPLETED
+  NO_SHOW
+  RESTORED
+}
+
+enum RescheduleStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELED
+}
+
+enum DayPlanStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CHANGED
+}
+
+enum StopStatus {
+  PLANNED
+  VISITED
+  SKIPPED
+}
+
+enum FollowUpStatus {
+  OPEN
+  DONE
+  CANCELED
+}
+
+enum OpportunityStatus {
+  PROSPECTING
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum PaymentStatus {
+  NOT_APPLICABLE
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum NotificationType {
+  FOLLOW_UP_DUE
+  FOLLOW_UP_OVERDUE
+  APPOINTMENT_UPCOMING
+  APPOINTMENT_CANCELED
+  RESCHEDULE_REQUESTED
+  RESCHEDULE_APPROVED
+  RESCHEDULE_DECLINED
+  NEW_FEEDBACK
+  NEW_SALE
+  LEAD_NOT_VISITED
+  LEAD_ASSIGNED
+}
+
+enum ImportKind {
+  SCREENSHOT
+  CSV
+}
+
+enum ImportRecordStatus {
+  PENDING
+  IMPORTED
+  MERGED
+  SKIPPED
+  ERROR
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         Role
+  passwordHash String
+  active       Boolean  @default(true)
+  // bumped on password change / deactivation to invalidate existing sessions
+  sessionVersion Int    @default(1)
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedLeads      Lead[]               @relation("LeadAssignedRep")
+  assignmentsAsRep   LeadAssignment[]     @relation("AssignmentRep")
+  assignmentsMade    LeadAssignment[]     @relation("AssignmentBy")
+  visits             Visit[]
+  appointments       Appointment[]        @relation("AppointmentRep")
+  appointmentsMade   Appointment[]        @relation("AppointmentCreatedBy")
+  appointmentChanges AppointmentChange[]
+  rescheduleRequests RescheduleRequest[]  @relation("RescheduleRequestedBy")
+  reschedulesDecided RescheduleRequest[]  @relation("RescheduleResolvedBy")
+  templates          ScheduleTemplate[]
+  dayPlans           DayPlan[]
+  followUps          FollowUp[]           @relation("FollowUpAssignee")
+  followUpsCreated   FollowUp[]           @relation("FollowUpCreatedBy")
+  opportunities      Opportunity[]
+  notifications      Notification[]
+  importBatches      ImportBatch[]
+  auditLogs          AuditLog[]
+  savedViews         SavedView[]
+}
+
+model Territory {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  color      String    @default("#4f46e5")
+  notes      String?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  areas         Area[]
+  leads         Lead[]
+  templateDays  ScheduleTemplateDay[]
+  dayPlans      DayPlan[]
+}
+
+model Area {
+  id          String    @id @default(cuid())
+  territoryId String
+  name        String
+  notes       String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  territory    Territory             @relation(fields: [territoryId], references: [id], onDelete: Restrict)
+  leads        Lead[]
+  templateDays ScheduleTemplateDay[]
+  dayPlans     DayPlan[]
+
+  @@unique([territoryId, name])
+}
+
+model Lead {
+  id                String       @id @default(cuid())
+  leadNumber        Int          @unique @default(autoincrement())
+  businessName      String
+  normalizedName    String
+  contactName       String?
+  jobTitle          String?
+  phone             String?
+  normalizedPhone   String?
+  email             String?
+  address           String?
+  city              String?
+  state             String?
+  zip               String?
+  normalizedAddress String?
+  territoryId       String?
+  areaId            String?
+  source            String?
+  industry          String?
+  assignedRepId     String?
+  priority          LeadPriority @default(NORMAL)
+  status            LeadStatus   @default(NEW)
+  estimatedValue    Decimal?     @db.Decimal(12, 2)
+  notes             String?
+  tags              String[]
+  isDemo            Boolean      @default(false)
+  archivedAt        DateTime?
+  // optimistic concurrency: incremented on each edit
+  version           Int          @default(1)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  // rollups (recomputed from Visit / FollowUp / Appointment / DayPlanStop)
+  lastVisitAt       DateTime?
+  lastContactAt     DateTime?
+  lastVisitOutcome  VisitOutcome?
+  latestFeedback    String?
+  visitCount        Int          @default(0)
+  nextFollowUpAt    DateTime?
+  nextAppointmentAt DateTime?
+  nextPlannedVisit  DateTime?
+
+  territory     Territory?          @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  area          Area?               @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  assignedRep   User?               @relation("LeadAssignedRep", fields: [assignedRepId], references: [id], onDelete: SetNull)
+  assignments   LeadAssignment[]
+  visits        Visit[]
+  appointments  Appointment[]
+  reschedules   RescheduleRequest[]
+  stops         DayPlanStop[]
+  followUps     FollowUp[]
+  opportunities Opportunity[]
+  auditLogs     AuditLog[]
+  importRecords ImportRecord[]
+
+  @@index([normalizedName])
+  @@index([normalizedPhone])
+  @@index([normalizedAddress])
+  @@index([assignedRepId, archivedAt])
+  @@index([status])
+  @@index([areaId])
+  @@index([lastVisitAt])
+  @@index([nextFollowUpAt])
+}
+
+model LeadAssignment {
+  id           String    @id @default(cuid())
+  leadId       String
+  repId        String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+
+  lead       Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  rep        User @relation("AssignmentRep", fields: [repId], references: [id], onDelete: Restrict)
+  assignedBy User @relation("AssignmentBy", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@index([leadId])
+  @@index([repId])
+}
+
+model Visit {
+  id                 String        @id @default(cuid())
+  leadId             String
+  repId              String
+  visitAt            DateTime
+  type               VisitType
+  outcome            VisitOutcome
+  contactEncountered String?
+  feedback           String?
+  objections         String?
+  interestLevel      InterestLevel?
+  followUpAction     String?
+  followUpDueAt      DateTime?
+  nextAppointmentId  String?       @unique
+  appointmentId      String?       // the appointment this visit fulfilled, if any
+  notes              String?
+  attachmentPath     String?
+  attachmentName     String?
+  attachmentMime     String?
+  // idempotency: a resubmitted form with the same key does not create a second visit
+  clientKey          String?       @unique
+  createdAt          DateTime      @default(now())
+
+  lead            Lead         @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  rep             User         @relation(fields: [repId], references: [id], onDelete: Restrict)
+  nextAppointment Appointment? @relation("VisitNextAppointment", fields: [nextAppointmentId], references: [id], onDelete: SetNull)
+  appointment     Appointment? @relation("VisitForAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
+  followUps       FollowUp[]
+  stops           DayPlanStop[]
+  opportunities   Opportunity[]
+
+  @@index([leadId, visitAt])
+  @@index([repId, visitAt])
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  leadId      String
+  repId       String
+  kind        AppointmentKind   @default(APPOINTMENT)
+  title       String?
+  startAt     DateTime
+  endAt       DateTime
+  status      AppointmentStatus @default(SCHEDULED)
+  location    String?
+  notes       String?
+  cancelReason String?
+  canceledAt  DateTime?
+  createdById String
+  clientKey   String?           @unique
+  version     Int               @default(1)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  lead        Lead                @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  rep         User                @relation("AppointmentRep", fields: [repId], references: [id], onDelete: Restrict)
+  createdBy   User                @relation("AppointmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  changes     AppointmentChange[]
+  reschedules RescheduleRequest[]
+  visitsFrom  Visit[]             @relation("VisitForAppointment")
+  bookedBy    Visit?              @relation("VisitNextAppointment")
+
+  @@index([repId, startAt])
+  @@index([leadId, startAt])
+  @@index([status])
+}
+
+model AppointmentChange {
+  id                  String                  @id @default(cuid())
+  appointmentId       String
+  action              AppointmentChangeAction
+  fromStart           DateTime?
+  fromEnd             DateTime?
+  toStart             DateTime?
+  toEnd               DateTime?
+  reason              String?
+  changedById         String
+  rescheduleRequestId String?
+  createdAt           DateTime                @default(now())
+
+  appointment       Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  changedBy         User               @relation(fields: [changedById], references: [id], onDelete: Restrict)
+  rescheduleRequest RescheduleRequest? @relation(fields: [rescheduleRequestId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId, createdAt])
+}
+
+model RescheduleRequest {
+  id              String           @id @default(cuid())
+  appointmentId   String
+  leadId          String
+  originalStart   DateTime
+  originalEnd     DateTime
+  requestedStart  DateTime
+  requestedEnd    DateTime
+  reason          String
+  requestedById   String
+  status          RescheduleStatus @default(PENDING)
+  resolutionNotes String?
+  resolvedById    String?
+  resolvedAt      DateTime?
+  finalStart      DateTime?
+  finalEnd        DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  appointment Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  lead        Lead                @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  requestedBy User                @relation("RescheduleRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  resolvedBy  User?               @relation("RescheduleResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict)
+  changes     AppointmentChange[]
+
+  @@index([status, createdAt])
+  @@index([appointmentId])
+}
+
+model ScheduleTemplate {
+  id        String   @id @default(cuid())
+  repId     String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rep  User                  @relation(fields: [repId], references: [id], onDelete: Cascade)
+  days ScheduleTemplateDay[]
+
+  @@index([repId, active])
+}
+
+model ScheduleTemplateDay {
+  id          String  @id @default(cuid())
+  templateId  String
+  weekday     Int // 0 = Sunday … 6 = Saturday
+  label       String?
+  territoryId String?
+  areaId      String?
+  startTime   String? // "09:00" local
+  endTime     String? // "17:00" local
+  visitTarget Int?
+  notes       String?
+
+  template  ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  territory Territory?       @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  area      Area?            @relation(fields: [areaId], references: [id], onDelete: SetNull)
+
+  @@unique([templateId, weekday])
+}
+
+model DayPlan {
+  id          String        @id @default(cuid())
+  repId       String
+  date        String // local calendar date "YYYY-MM-DD" in the configured time zone
+  label       String?
+  territoryId String?
+  areaId      String?
+  startTime   String?
+  endTime     String?
+  visitTarget Int?
+  routeNotes  String?
+  status      DayPlanStatus @default(PLANNED)
+  // true when this day differs from the recurring template (template changes don't overwrite it)
+  isOverride  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  rep       User          @relation(fields: [repId], references: [id], onDelete: Cascade)
+  territory Territory?    @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  area      Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  stops     DayPlanStop[]
+
+  @@unique([repId, date])
+}
+
+model DayPlanStop {
+  id        String     @id @default(cuid())
+  dayPlanId String
+  leadId    String
+  position  Int        @default(0)
+  status    StopStatus @default(PLANNED)
+  visitId   String?
+  note      String?
+  createdAt DateTime   @default(now())
+
+  dayPlan DayPlan @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  visit   Visit?  @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  @@unique([dayPlanId, leadId])
+}
+
+model FollowUp {
+  id            String         @id @default(cuid())
+  leadId        String
+  assignedToId  String
+  createdById   String
+  dueAt         DateTime
+  action        String
+  status        FollowUpStatus @default(OPEN)
+  sourceVisitId String?
+  completedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo  User   @relation("FollowUpAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  createdBy   User   @relation("FollowUpCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  sourceVisit Visit? @relation(fields: [sourceVisitId], references: [id], onDelete: SetNull)
+
+  @@index([status, dueAt])
+  @@index([leadId])
+}
+
+model Opportunity {
+  id               String            @id @default(cuid())
+  oppNumber        Int               @unique @default(autoincrement())
+  leadId           String
+  repId            String
+  product          String
+  status           OpportunityStatus @default(PROSPECTING)
+  openedAt         DateTime          @default(now())
+  expectedCloseAt  DateTime?
+  closedAt         DateTime?
+  estimatedValue   Decimal?          @db.Decimal(12, 2)
+  finalAmount      Decimal?          @db.Decimal(12, 2)
+  commissionRate   Decimal?          @db.Decimal(6, 4) // 0.1000 = 10%
+  commissionAmount Decimal?          @db.Decimal(12, 2)
+  paymentStatus    PaymentStatus     @default(NOT_APPLICABLE)
+  notes            String?
+  sourceVisitId    String?
+  lostReason       String?
+  isDemo           Boolean           @default(false)
+  archivedAt       DateTime?
+  version          Int               @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  rep         User   @relation(fields: [repId], references: [id], onDelete: Restrict)
+  sourceVisit Visit? @relation(fields: [sourceVisitId], references: [id], onDelete: SetNull)
+
+  @@index([status, closedAt])
+  @@index([leadId])
+  @@index([repId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  dedupeKey String
+  readAt    DateTime?
+  // channels the notification was delivered to: in_app (always), later email/sms/push
+  channels  String[]
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+}
+
+model ImportBatch {
+  id          String     @id @default(cuid())
+  kind        ImportKind
+  createdById String
+  provider    String?
+  notes       String?
+  createdAt   DateTime   @default(now())
+  completedAt DateTime?
+
+  createdBy User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  images    ImportImage[]
+  records   ImportRecord[]
+}
+
+model ImportImage {
+  id        String   @id @default(cuid())
+  batchId   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  sha256    String
+  path      String
+  rawText   String? // text returned by the extraction provider, kept verbatim
+  status    String   @default("UPLOADED") // UPLOADED | EXTRACTED | NOT_CONFIGURED | ERROR
+  error     String?
+  createdAt DateTime @default(now())
+
+  batch   ImportBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  records ImportRecord[]
+}
+
+model ImportRecord {
+  id         String             @id @default(cuid())
+  batchId    String
+  imageId    String?
+  rowNumber  Int?
+  // extracted values exactly as read, the reviewer's edited values, and per-field confidence
+  extracted  Json
+  edited     Json?
+  confidence Json?
+  sourceText String?
+  status     ImportRecordStatus @default(PENDING)
+  leadId     String?
+  error      String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  batch ImportBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  image ImportImage? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  lead  Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([batchId, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String // e.g. lead.created, visit.recorded, appointment.moved
+  entityType String
+  entityId   String?
+  leadId     String? // set for events that belong on a lead's activity timeline
+  summary    String
+  data       Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  lead  Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+model SavedView {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  query     String // URL query string of the lead filters
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
