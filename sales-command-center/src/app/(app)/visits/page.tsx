@@ -8,7 +8,7 @@ import { Badge, Empty, Flash, PageHeader, Section } from "@/components/ui";
 import { OutcomeBadge } from "@/components/badges";
 import { RangePicker } from "@/components/RangePicker";
 import { INTEREST_LABEL, VISIT_OUTCOMES, VISIT_OUTCOME_LABEL, VISIT_TYPE_LABEL } from "@/lib/labels";
-import { fmtDateTime, resolveRange } from "@/lib/time";
+import { fmtDateTime, resolveRange, visitDateTime } from "@/lib/time";
 
 export const metadata = { title: "Visits & Feedback" };
 
@@ -46,7 +46,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                   <OutcomeBadge o={v.outcome} />
                   <Badge tone="neutral">{VISIT_TYPE_LABEL[v.type]}</Badge>
                   {v.interestLevel && <Badge tone="muted">Interest: {INTEREST_LABEL[v.interestLevel]}</Badge>}
-                  <span className="text-xs text-muted">{fmtDateTime(v.visitAt, tz)}{isCoord ? ` · ${v.rep.name}` : ""}{v.lead.area ? ` · ${v.lead.area.name}` : ""}</span>
+                  <span className="text-xs text-muted">{visitDateTime(v, tz)}{isCoord ? ` · ${v.rep.name}` : ""}{v.lead.area ? ` · ${v.lead.area.name}` : ""}</span>
                 </div>
                 {v.feedback && <p className="mt-1 whitespace-pre-line text-sm">{v.feedback}</p>}
                 {v.objections && <p className="mt-1 text-sm text-ink-2"><span className="text-xs text-muted">Objections: </span>{v.objections}</p>}

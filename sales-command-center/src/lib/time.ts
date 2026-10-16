@@ -192,3 +192,8 @@ export function apptDateTime(a: ApptTimes, tz: string): string {
 export function apptRange(a: ApptTimes, tz: string): string {
   return untimed(a) ? `${fmtDate(a.startAt, tz, { weekday: "short", month: "short", day: "numeric", year: "numeric" })} · time not set` : `${fmtDateTime(a.startAt, tz)}–${fmtTime(a.endAt, tz)}`;
 }
+
+/** Visit date/time; "time not set" when only the date is known. */
+export function visitDateTime(v: { visitAt: Date; timeSet?: boolean | null }, tz: string): string {
+  return v.timeSet === false ? `${fmtDate(v.visitAt, tz, { month: "short", day: "numeric", year: "numeric" })} · time not set` : fmtDateTime(v.visitAt, tz);
+}

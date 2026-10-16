@@ -128,7 +128,9 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
 3. CSV columns are matched to lead fields by their names. You can change the matching.
    - **Appointment-log exports** (columns like `APPTDATE, PN, COMPANY, …, Combo23, Text129`) are recognized automatically:
      - **`PN`** becomes the lead's **Prospect / account #**. Rows with the same number become one lead with several appointments.
-     - **`APPTDATE`** becomes an appointment on that date. The file has no times, so it shows as "time not set" until you move it to a time.
+     - **`APPTDATE`** becomes an appointment on that date, with the time shown as "time not set". The file has no times.
+       - **Past dates** are treated as held appointments: marked **Completed** and recorded as a **visit**, so the lead shows "Last visited" and moves to **Visited**. The visit's outcome is "Other" with a note that the file doesn't say what happened; no feedback is made up. Rows the file marks canceled or no-show are kept that way and aren't counted as visits.
+       - **Today or later** stays an upcoming appointment with the file's status.
      - **`Text129`** (CONFIRMED) becomes the appointment's status.
      - **`Combo23`** is matched to a rep login with the same name ("Mozzano, Louis" → Louis Mozzano); otherwise the import's default rep is used.
    - Columns that aren't matched to a field (BC, Region, Text133, …) are kept on the lead under **Details from import**, exactly as written.

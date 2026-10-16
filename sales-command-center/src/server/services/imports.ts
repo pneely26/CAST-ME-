@@ -169,6 +169,7 @@ export async function getBatchForReview(actor: Actor, batchId: string, opts: { v
   if (!batch) throw notFound("Import");
   const meta = csvMeta(batch);
   const reps = await activeReps();
+  const todayKey = dateKeyInTz(new Date(), (await getSettings()).timezone);
   const pending = batch.records.filter((r) => r.status === "PENDING");
   // rows that share a prospect / account # are the same business: the first creates the lead, the rest add to it
   const groupLeader = new Map<string, number>();
@@ -196,6 +197,9 @@ export async function getBatchForReview(actor: Actor, batchId: string, opts: { v
       if (values.repName && !rep) flags.push({ field: "repName", level: "info", message: `“${values.repName}” isn't a sales rep login in this app — the lead gets the default rep chosen below. Add them in Settings → Users to match automatically.` });
       if (keys(values).some((k) => (keyCount.get(k) ?? 0) > 1)) flags.push({ level: "warn", message: "Another row in this import looks like the same business" });
       if (r.error) flags.push({ level: "warn", message: r.error });
+      const day = parseLooseDate(values.appointmentDate);
+      const st = parseApptStatus(values.appointmentStatus);
+      if (day && day < todayKey && st !== "CANCELED" && st !== "NO_SHOW") flags.push({ field: "appointmentDate", level: "info", message: "Past appointment — imported as held (Completed) and counted as a visit" });
     }
     const details = meta && r.sourceText ? unmappedDetails(JSON.parse(r.sourceText), meta.mapping) : {};
     return { ...r, values, flags, details, idMatch, follower, rep, clean: r.status === "PENDING" && isClean(flags) && !flags.some((f) => f.message.startsWith("Another row")) && !r.error };
@@ -325,7 +329,10 @@ function rowDetails(r: { sourceText: string | null }, batch: { kind: string; not
 
 /**
  * Add the row's appointment to a lead. Imported appointments keep the file's date (and time, if it has one;
- * otherwise the time is "not set") and status. Skips if the lead already has an appointment that day.
+ * otherwise the time is "not set"). Skips if the lead already has an appointment that day.
+ * - Past dates are appointments that were held: marked Completed and recorded as a visit
+ *   (outcome "Other", no feedback invented), unless the file says canceled / no-show.
+ * - Today and later: the file's status (Confirmed / Scheduled).
  * No notifications: these are records from another system, not new bookings.
  */
 async function addImportedAppointment(tx: Tx, actor: Actor, leadId: string, repId: string | null, v: ImportValues, label: string): Promise<string | null> {
@@ -340,20 +347,27 @@ async function addImportedAppointment(tx: Tx, actor: Actor, leadId: string, repI
   const time = parseLooseTime(v.appointmentTime);
   const startAt = time ? zonedToUtc(day, time, tz) : start;
   const endAt = time ? new Date(startAt.getTime() + settings.defaultAppointmentMinutes * 60_000) : end;
-  const status = parseApptStatus(v.appointmentStatus) ?? "SCHEDULED";
+  const fileStatus = parseApptStatus(v.appointmentStatus) ?? "SCHEDULED";
+  const past = day < dateKeyInTz(new Date(), tz);
+  const status = past && !["CANCELED", "NO_SHOW"].includes(fileStatus) ? "COMPLETED" : fileStatus;
   const lead = await tx.lead.findUniqueOrThrow({ where: { id: leadId } });
   const appt = await tx.appointment.create({
     data: { leadId, repId, startAt, endAt, timeSet: !!time, status, location: [lead.address, lead.city].filter(Boolean).join(", ") || null, notes: `Imported from ${label}`, createdById: actor.id, ...(status === "CANCELED" ? { canceledAt: new Date() } : {}) },
   });
   await tx.appointmentChange.create({ data: { appointmentId: appt.id, action: "CREATED", toStart: startAt, toEnd: endAt, changedById: actor.id, reason: `Imported from ${label}` } });
-  await audit(tx, actor, "appointment.imported", { type: "Appointment", id: appt.id, leadId }, `Appointment on ${when}${time ? "" : " (time not set)"} imported from ${label} — status ${status.toLowerCase().replace("_", " ")}`);
-  // an upcoming active appointment moves a new lead along, exactly like a booking would
-  if (["SCHEDULED", "CONFIRMED"].includes(status) && day >= dateKeyInTz(new Date(), tz)) {
-    const next = advanceStatus(lead.status, "APPOINTMENT_SCHEDULED");
-    if (next !== lead.status) await tx.lead.update({ where: { id: leadId }, data: { status: next, version: { increment: 1 } } });
+  await audit(tx, actor, "appointment.imported", { type: "Appointment", id: appt.id, leadId }, `Appointment on ${when}${time ? "" : " (time not set)"} imported from ${label} — ${status === "COMPLETED" ? "held (past), recorded as a visit" : `status ${status.toLowerCase().replace("_", " ")}`}`);
+  if (status === "COMPLETED") {
+    await tx.appointmentChange.create({ data: { appointmentId: appt.id, action: "COMPLETED", fromStart: startAt, fromEnd: endAt, changedById: actor.id, reason: `Past appointment imported from ${label}` } });
+    await tx.visit.create({
+      data: { leadId, repId, visitAt: startAt, timeSet: !!time, type: "SCHEDULED_APPOINTMENT", outcome: "OTHER", appointmentId: appt.id, notes: `Appointment held — imported from ${label}. The file doesn't record what happened at the appointment.` },
+    });
   }
+  // move the lead along like a booking or visit would (closed statuses are never changed)
+  const target = status === "COMPLETED" ? "VISITED" : ["SCHEDULED", "CONFIRMED"].includes(status) && !past ? "APPOINTMENT_SCHEDULED" : null;
+  const next = target ? advanceStatus(lead.status, target) : lead.status;
+  if (next !== lead.status) await tx.lead.update({ where: { id: leadId }, data: { status: next, version: { increment: 1 } } });
   await refreshLeadRollups(tx, leadId);
-  return `Appointment added: ${when}${time ? "" : " (time not set)"}, ${status.toLowerCase().replace("_", " ")}`;
+  return `Appointment added: ${when}${time ? "" : " (time not set)"}, ${status === "COMPLETED" ? "held — counted as a visit" : status.toLowerCase().replace("_", " ")}`;
 }
 
 async function batchLabel(batchId: string) {

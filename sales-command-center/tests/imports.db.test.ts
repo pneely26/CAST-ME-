@@ -163,12 +163,18 @@ describe.skipIf(!TEST_URL)("lead imports (database)", () => {
     expect(res).toMatchObject({ imported: 2, merged: 1, appointments: 3, failed: 0, left: 0 });
     const zephyr = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000001" }, include: { appointments: { orderBy: { startAt: "asc" } } } });
     expect(zephyr).toMatchObject({ businessName: "Zephyr Test Roofing", contactName: "Ann Example", employeeCount: 12, zip: "40504-0001", assignedRepId: U.rep.id });
-    expect(zephyr.appointments.map((a) => [a.status, a.timeSet, a.repId])).toEqual([["CONFIRMED", false, U.rep.id], ["SCHEDULED", false, U.rep.id]]);
+    // past dates = appointments that were held: completed, and each recorded as a visit (no time invented)
+    expect(zephyr.appointments.map((a) => [a.status, a.timeSet, a.repId])).toEqual([["COMPLETED", false, U.rep.id], ["COMPLETED", false, U.rep.id]]);
+    const zv = await prisma.visit.findMany({ where: { leadId: zephyr.id }, orderBy: { visitAt: "asc" } });
+    expect(zv.map((v) => [v.type, v.outcome, v.timeSet, v.feedback])).toEqual([["SCHEDULED_APPOINTMENT", "OTHER", false, null], ["SCHEDULED_APPOINTMENT", "OTHER", false, null]]);
+    expect(zephyr.visitCount).toBe(2);
+    expect(zephyr.lastVisitAt?.getTime()).toBe(zephyr.appointments[1].startAt.getTime());
+    expect(zephyr.status).toBe("VISITED");
     expect(zephyr.sourceDetails).toMatchObject({ APPT: "1", BC: "104040", Region: "SW", Text133: "DR", Combo141: "BC Dept", Option120: "False" });
     expect(Object.keys(zephyr.sourceDetails as object)).not.toContain("COMPANY");
     const quillon = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000002" }, include: { appointments: true } });
     expect(quillon.assignedRepId).toBe(U.rep2.id); // unknown rep in file → the default chosen for the import
-    expect(quillon.appointments[0].status).toBe("CONFIRMED");
+    expect(quillon.appointments[0].status).toBe("COMPLETED");
     // one summary notification per rep, not one per lead
     expect(await prisma.notification.count({ where: { dedupeKey: { startsWith: `import-assign:${batch.id}:` } } })).toBe(2);
 
@@ -180,5 +186,18 @@ describe.skipIf(!TEST_URL)("lead imports (database)", () => {
     expect(r2).toMatchObject({ imported: 0, merged: 3, appointments: 0 });
     expect(await prisma.lead.count()).toBe(leadsBefore);
     expect(await prisma.appointment.count()).toBe(apptsBefore);
+    expect(await prisma.visit.count({ where: { leadId: zephyr.id } })).toBe(2);
+  });
+
+  it("an imported appointment dated today or later stays upcoming, with the file's status, and isn't a visit", async () => {
+    const H = "APPTDATE,PN,COMPANY,ADDRESS,CITY,ST,ZIP,PHONE,Name,Combo23,Text129";
+    const future = new Date(Date.now() + 10 * 86_400_000);
+    const d = `${String(future.getUTCDate()).padStart(2, "0")}-${future.toLocaleString("en-US", { month: "short", timeZone: "UTC" })}-${String(future.getUTCFullYear()).slice(2)}`;
+    const batch = await imp.createCsvBatch(U.coordinator, new File([`${H}\n${d},900000003,Upcoming Test Signs,3 Sample Rd,Berea,KY,40403,(859) 555-0143,Cy Example,"Rep, Riley",CONFIRMED`], "x.csv"));
+    await imp.importCleanRows(U.coordinator, batch.id);
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000003" }, include: { appointments: true, visits: true } });
+    expect(lead.appointments[0]).toMatchObject({ status: "CONFIRMED", timeSet: false });
+    expect(lead.visits).toHaveLength(0);
+    expect(lead.status).toBe("APPOINTMENT_SCHEDULED");
   });
 });

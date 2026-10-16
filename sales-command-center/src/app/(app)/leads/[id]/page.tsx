@@ -13,7 +13,7 @@ import { setStatusAction, archiveLeadAction, assignLeadAction } from "@/app/acti
 import { createFollowUpAction, followUpStatusAction } from "@/app/actions/followups";
 import { CLOSED_STATUSES, INTEREST_LABEL, LEAD_STATUSES, LEAD_STATUS_LABEL, VISIT_TYPE_LABEL, money } from "@/lib/labels";
 import { formatPhone } from "@/lib/normalize";
-import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime } from "@/lib/time";
+import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime, visitDateTime } from "@/lib/time";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -265,7 +265,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               {lead.visits.map((v) => (
                 <li key={v.id} className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{fmtDateTime(v.visitAt, tz)}</span>
+                    <span className="font-medium">{visitDateTime(v, tz)}</span>
                     <Badge tone="neutral">{VISIT_TYPE_LABEL[v.type]}</Badge>
                     <OutcomeBadge o={v.outcome} />
                     {v.interestLevel && <Badge tone={v.interestLevel === "HIGH" ? "good" : v.interestLevel === "MEDIUM" ? "info" : "muted"}>Interest: {INTEREST_LABEL[v.interestLevel]}</Badge>}

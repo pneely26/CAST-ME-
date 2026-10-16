@@ -318,6 +318,8 @@ model Visit {
   leadId             String
   repId              String
   visitAt            DateTime
+  // false when only the date is known (e.g. a past appointment imported from a log without times)
+  timeSet            Boolean       @default(true)
   type               VisitType
   outcome            VisitOutcome
   contactEncountered String?
