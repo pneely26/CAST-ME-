@@ -114,6 +114,6 @@ export async function dashboardData(actor: Actor, settings: AppSettings, range: 
     salesAll,
     recentSales,
     weekDays,
-    hasDemo: opps.some((o) => o.isDemo),
+    hasDemo: opps.some((o) => o.isDemo) || (await prisma.lead.count({ where: { ...leadScope, isDemo: true, archivedAt: null } })) > 0,
   };
 }
