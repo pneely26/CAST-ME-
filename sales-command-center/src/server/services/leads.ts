@@ -186,6 +186,15 @@ async function applyStatusRules(tx: Tx, actor: Actor, leadId: string, from: Lead
   await refreshLeadRollups(tx, leadId);
 }
 
+/** Change status inside an existing transaction (used by visits, appointments, sales). */
+export async function changeLeadStatusInTx(tx: Tx, actor: Actor, leadId: string, to: LeadStatus) {
+  const lead = await tx.lead.findUniqueOrThrow({ where: { id: leadId } });
+  if (lead.status === to) return lead.status;
+  await tx.lead.update({ where: { id: leadId }, data: { status: to, version: { increment: 1 } } });
+  await applyStatusRules(tx, actor, leadId, lead.status, to);
+  return to;
+}
+
 export async function setLeadStatus(actor: Actor, id: string, status: LeadStatus) {
   return updateLead(actor, id, { status });
 }
