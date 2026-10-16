@@ -11,6 +11,7 @@ import { notify } from "./notifications";
 import { refreshLeadRollups } from "./rollups";
 import { getSettings } from "../settings";
 import type { Tx } from "../db";
+import { cityKey, likelyCityTypo } from "@/lib/domain/imports";
 import { IMPORT_FIELDS, applyMapping, autoMapHeaders, detectPreset, hasBlockingFlag, isClean, normalizePersonName, parseApptStatus, parseLooseDate, parseLooseTime, reviewFlags, unmappedDetails, type ImportConfidence, type ImportField, type ImportValues } from "@/lib/domain/imports";
 import { advanceStatus } from "@/lib/domain/rollups";
 import { dateKeyInTz, dayRangeUtc, fmtDateKey, fmtClock, zonedToUtc } from "@/lib/time";
@@ -181,6 +182,16 @@ export async function getBatchForReview(actor: Actor, batchId: string, opts: { v
   const existingByExt = new Map(
     (extIds.length ? await prisma.lead.findMany({ where: { externalId: { in: extIds } }, select: { id: true, leadNumber: true, businessName: true, externalId: true } }) : []).map((l) => [l.externalId!, l]),
   );
+  // city spellings: every city in this file plus existing areas (an existing area counts as well established)
+  const cityCounts = new Map<string, { name: string; count: number }>();
+  for (const a of await prisma.area.findMany({ where: { archivedAt: null }, select: { name: true } })) cityCounts.set(cityKey(a.name), { name: a.name, count: 1000 });
+  for (const r of batch.records) {
+    const c = recordValues(r).city;
+    if (!c?.trim()) continue;
+    const e = cityCounts.get(cityKey(c)) ?? { name: titleCase(c), count: 0 };
+    e.count++;
+    cityCounts.set(cityKey(c), e);
+  }
   const keyCount = new Map<string, number>();
   const keys = (v: ImportValues) => (v.externalId ? [] : [v.businessName ? "n:" + normalizeBusinessName(v.businessName) : "", normalizePhone(v.phone).length >= 7 ? "p:" + normalizePhone(v.phone) : ""].filter(Boolean));
   for (const r of pending) for (const k of keys(recordValues(r))) keyCount.set(k, (keyCount.get(k) ?? 0) + 1);
@@ -197,6 +208,8 @@ export async function getBatchForReview(actor: Actor, batchId: string, opts: { v
       if (values.repName && !rep) flags.push({ field: "repName", level: "info", message: `“${values.repName}” isn't a sales rep login in this app — the lead gets the default rep chosen below. Add them in Settings → Users to match automatically.` });
       if (keys(values).some((k) => (keyCount.get(k) ?? 0) > 1)) flags.push({ level: "warn", message: "Another row in this import looks like the same business" });
       if (r.error) flags.push({ level: "warn", message: r.error });
+      const typo = likelyCityTypo(values.city, cityCounts);
+      if (typo) flags.push({ field: "city", level: "warn", message: `“${values.city}” looks like a misspelling of “${typo}” — fix the city (or leave it if it's right), then import this row` });
       const day = parseLooseDate(values.appointmentDate);
       const st = parseApptStatus(values.appointmentStatus);
       if (day && day < todayKey && st !== "CANCELED" && st !== "NO_SHOW") flags.push({ field: "appointmentDate", level: "info", message: "Past appointment — imported as held (Completed) and counted as a visit" });
@@ -284,6 +297,60 @@ export interface ImportDefaults {
   assignedRepId?: string | null;
   areaId?: string | null;
   source?: string | null;
+}
+
+/** Area choice for an import: an area id, "city" (each lead goes to the area named after its city), or "none". */
+export const AREA_BY_CITY = "city";
+
+const STATE_NAMES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia", FL: "Florida",
+  GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire",
+  NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
+  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", PR: "Puerto Rico",
+};
+
+const titleCase = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase().replace(/(^|[\s\-'.])([a-z])/g, (_, p, c) => p + c.toUpperCase());
+
+/**
+ * Area for a lead's city: an existing area with that name (any capitalization) is reused — preferring one in the
+ * territory for the lead's state — otherwise an area named after the city is created in a territory named after
+ * the state (e.g. "Lexington" in "Kentucky"). No city → no area.
+ */
+export async function areaForCity(actor: Actor, city: string | null | undefined, state: string | null | undefined): Promise<{ areaId: string; territoryId: string } | null> {
+  if (!city?.trim()) return null;
+  const name = titleCase(city);
+  const code = (state ?? "").trim().toUpperCase();
+  const territoryName = STATE_NAMES[code] ?? (code ? code : "No state");
+  const existing = await prisma.area.findMany({ where: { name: { equals: name, mode: "insensitive" }, archivedAt: null, territory: { archivedAt: null } }, include: { territory: { select: { name: true } } } });
+  const pick = existing.find((a) => a.territory.name.toLowerCase() === territoryName.toLowerCase()) ?? (existing.length === 1 ? existing[0] : null);
+  if (pick) return { areaId: pick.id, territoryId: pick.territoryId };
+  return prisma.$transaction(async (tx) => {
+    let territory = await tx.territory.findFirst({ where: { name: { equals: territoryName, mode: "insensitive" } } });
+    if (!territory) {
+      territory = await tx.territory.create({ data: { name: territoryName } });
+      await audit(tx, actor, "territory.created", { type: "Territory", id: territory.id }, `Created territory ${territory.name} (from an import)`);
+    } else if (territory.archivedAt) {
+      territory = await tx.territory.update({ where: { id: territory.id }, data: { archivedAt: null } });
+      await audit(tx, actor, "territory.restored", { type: "Territory", id: territory.id }, `Restored territory ${territory.name} (an import placed leads in it)`);
+    }
+    let area = await tx.area.findFirst({ where: { territoryId: territory.id, name: { equals: name, mode: "insensitive" } } });
+    if (!area) {
+      area = await tx.area.create({ data: { territoryId: territory.id, name } });
+      await audit(tx, actor, "area.created", { type: "Area", id: area.id }, `Created area ${name} in ${territory.name} (from an import)`);
+    } else if (area.archivedAt) {
+      area = await tx.area.update({ where: { id: area.id }, data: { archivedAt: null } });
+      await audit(tx, actor, "area.restored", { type: "Area", id: area.id }, `Restored area ${area.name} (an import placed leads in it)`);
+    }
+    return { areaId: area.id, territoryId: territory.id };
+  });
+}
+
+async function resolveArea(actor: Actor, defaults: ImportDefaults, v: ImportValues): Promise<string | null> {
+  if (!defaults.areaId || defaults.areaId === "none") return null;
+  if (defaults.areaId === AREA_BY_CITY) return (await areaForCity(actor, v.city, v.state))?.areaId ?? null;
+  return defaults.areaId;
 }
 
 function sourceLabel(kind: string, defaults: ImportDefaults) {
@@ -397,7 +464,7 @@ export async function importAsNew(actor: Actor, recordId: string, defaults: Impo
   const repId = matchRep(v.repName, await activeReps())?.id ?? defaults.assignedRepId ?? null;
   const lead = await createLead(
     actor,
-    { ...leadFields(v), source: sourceLabel(batch.kind, defaults), assignedRepId: repId, areaId: defaults.areaId || null },
+    { ...leadFields(v), source: sourceLabel(batch.kind, defaults), assignedRepId: repId, areaId: await resolveArea(actor, defaults, v) },
     { allowDuplicate, source: `${batch.kind === "CSV" ? "CSV" : "screenshot"} import`, sourceDetails: rowDetails(r, batch), quiet: opts.quiet },
   );
   const note = await prisma.$transaction((tx) => addImportedAppointment(tx, actor, lead.id, repId, v, label));
@@ -429,6 +496,10 @@ export async function mergeInto(actor: Actor, recordId: string, leadId: string, 
   const fields = leadFields(v);
   if (fields.employeeCount && lead.employeeCount === null) patch.employeeCount = fields.employeeCount;
   if (v.externalId && !lead.externalId && !(await prisma.lead.findUnique({ where: { externalId: v.externalId } }))) patch.externalId = v.externalId;
+  if (!lead.areaId && defaults.areaId === AREA_BY_CITY) {
+    const area = await areaForCity(actor, v.city ?? lead.city, v.state ?? lead.state);
+    if (area) patch.areaId = area.areaId;
+  }
   if (v.notes) patch.notes = lead.notes ? `${lead.notes}\n\n— Imported ${new Date().toISOString().slice(0, 10)} —\n${v.notes}` : v.notes;
   if (Object.keys(patch).length) await updateLead(actor, lead.id, patch, lead.version);
   const incomingDetails = rowDetails(r, batch) ?? {};

@@ -153,7 +153,10 @@ export default async function ImportReviewPage({ params, searchParams }: { param
   const [d, settings, reps, areas] = await Promise.all([getBatchForReview(actor, id, { view, page }), getSettings(), repOptions(), areaOptions()]);
   const { batch, counts, imageCounts } = d;
   const provider = extractionStatus();
-  const defaults = { rep: sp(q, "rep"), area: sp(q, "area"), source: sp(q, "source") };
+  const metaForDefaults = csvMeta(batch);
+  const hasCity = !!metaForDefaults && Object.values(metaForDefaults.mapping).includes("city");
+  // CSV files with a city column default to placing each lead in its city's area
+  const defaults = { rep: sp(q, "rep"), area: sp(q, "area") ?? (hasCity ? "city" : "none"), source: sp(q, "source") };
   const keep = Object.fromEntries(Object.entries(defaults).filter(([, v]) => v)) as Record<string, string>;
   const href = (o: Record<string, string | number>) => `/import/${id}?${new URLSearchParams({ ...keep, view, ...Object.fromEntries(Object.entries(o).map(([k, v]) => [k, String(v)])) })}`;
   const meta = csvMeta(batch);
@@ -255,7 +258,7 @@ export default async function ImportReviewPage({ params, searchParams }: { param
             <select name="rep" defaultValue={defaults.rep ?? ""} className="input"><option value="">Unassigned</option>{reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
           </label>
           <label className="block text-sm"><span className="label">Area</span>
-            <select name="area" defaultValue={defaults.area ?? ""} className="input"><option value="">No area</option>{areas.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select>
+            <select name="area" defaultValue={defaults.area} className="input"><option value="city">Each lead's city (Somerset, Lexington…) — creates missing areas</option><option value="none">No area</option>{areas.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select>
           </label>
           <label className="block text-sm"><span className="label">Lead source</span>
             <input name="source" defaultValue={defaults.source ?? ""} placeholder={batch.kind === "CSV" ? "CSV import" : "Screenshot import"} className="input" maxLength={120} />
