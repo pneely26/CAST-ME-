@@ -49,7 +49,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
             openedAt: key(o.openedAt), expectedCloseAt: key(o.expectedCloseAt), closedAt: key(o.closedAt),
             estimatedValue: o.estimatedValue?.toString(), finalAmount: o.finalAmount?.toString(),
             commissionRatePct: o.commissionRate ? (Number(o.commissionRate) * 100).toString() : undefined, commissionAmount: o.commissionAmount?.toString(),
-            paymentStatus: o.paymentStatus, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId, signed44: o.signed44, runDate: o.runDate ?? undefined, goStatus: o.goStatus ?? undefined,
+            paymentStatus: o.paymentStatus, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId, signed44: o.signed44, runDate: o.runDate ?? undefined, goStatus: o.goStatus ?? undefined, calledToDesk: o.calledToDesk, tentativeRunDate: o.tentativeRunDate ?? undefined,
           }}
         />
       ) : (
@@ -65,6 +65,8 @@ export default async function OppPage({ params, searchParams }: { params: Promis
               <KV label="Signed 44">{o.signed44 ? "Yes" : "No"}</KV>
               <KV label="Run date">{o.runDate ? fmtDateKey(o.runDate) : "—"}</KV>
               <KV label="GO status">{o.goStatus || "—"}</KV>
+              <KV label="Called to desk">{o.calledToDesk ? "Yes" : "No"}</KV>
+              {o.calledToDesk && <KV label="Tentative run date">{o.tentativeRunDate ? fmtDateKey(o.tentativeRunDate) : "Not set"}</KV>}
               <KV label="Commission">{o.commissionAmount ? money(n(o.commissionAmount), { cents: true }) : o.commissionRate ? `${(Number(o.commissionRate) * 100).toFixed(2)}%` : "Not set"}</KV>
               <KV label="Source visit">{o.sourceVisit ? <Link className="link" href={`/leads/${o.leadId}?tab=visits`}>{fmtDate(o.sourceVisit.visitAt, tz)}</Link> : "—"}</KV>
               {o.lostReason && <KV label="Reason lost">{o.lostReason}</KV>}

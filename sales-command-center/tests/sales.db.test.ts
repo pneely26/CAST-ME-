@@ -101,4 +101,13 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
     const log = await prisma.auditLog.findFirstOrThrow({ where: { entityId: o.id, action: "opportunity.updated" } });
     expect(log.summary).toMatch(/runDate/);
   });
+
+  it("called to desk: tentative run date is kept only while the deal is called to the desk", async () => {
+    const lead = await newLead("Desk Call Bakery");
+    const o = await opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "2026-12-01" });
+    expect(o).toMatchObject({ calledToDesk: true, tentativeRunDate: "2026-12-01" });
+    await expect(opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "Dec 1" }, o.version)).rejects.toThrow(/Tentative run date/);
+    const off = await opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", calledToDesk: false, tentativeRunDate: "2026-12-01" }, o.version);
+    expect(off).toMatchObject({ calledToDesk: false, tentativeRunDate: null });
+  });
 });

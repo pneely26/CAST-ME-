@@ -343,7 +343,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           {lead.opportunities.length === 0 ? <Empty>No opportunities yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="tbl">
-                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Signed 44</th><th>Run date</th><th>GO status</th><th>Rep</th></tr></thead>
+                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Signed 44</th><th>Run date</th><th>GO status</th><th>Called to desk</th><th>Rep</th></tr></thead>
                 <tbody>
                   {lead.opportunities.map((o) => (
                     <tr key={o.id}>
@@ -357,6 +357,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                       <td>{o.signed44 ? "Yes" : "No"}</td>
                       <td className="whitespace-nowrap">{o.runDate ? fmtDateKey(o.runDate) : "—"}</td>
                       <td>{o.goStatus || "—"}</td>
+                      <td className="whitespace-nowrap">{o.calledToDesk ? `Yes${o.tentativeRunDate ? ` · tentative ${fmtDateKey(o.tentativeRunDate)}` : ""}` : "No"}</td>
                       <td>{o.rep.name}</td>
                     </tr>
                   ))}

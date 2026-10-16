@@ -551,6 +551,8 @@ model Opportunity {
   signed44         Boolean           @default(false)
   runDate          String? // local date "YYYY-MM-DD" the sold job actually runs
   goStatus         String?
+  calledToDesk     Boolean           @default(false)
+  tentativeRunDate String? // local date "YYYY-MM-DD"; set when the deal was called to the desk
   lostReason       String?
   isDemo           Boolean           @default(false)
   archivedAt       DateTime?

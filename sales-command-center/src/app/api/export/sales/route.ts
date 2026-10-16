@@ -37,6 +37,8 @@ export async function GET(req: Request) {
       { header: "Signed 44", value: (o) => (o.signed44 ? "Yes" : "No") },
       { header: "Run date", value: (o) => o.runDate ?? "" },
       { header: "GO status", value: (o) => o.goStatus },
+      { header: "Called to desk", value: (o) => (o.calledToDesk ? "Yes" : "No") },
+      { header: "Tentative run date", value: (o) => o.tentativeRunDate ?? "" },
       { header: "Lost reason", value: (o) => o.lostReason },
       { header: "Notes", value: (o) => o.notes },
     ]),

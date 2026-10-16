@@ -34,6 +34,8 @@ export async function saveOpportunityAction(_: unknown, fd: FormData): Promise<A
         signed44: bool(fd, "signed44"),
         runDate: strOrNull(fd, "runDate", 10),
         goStatus: strOrNull(fd, "goStatus", 300),
+        calledToDesk: bool(fd, "calledToDesk"),
+        tentativeRunDate: strOrNull(fd, "tentativeRunDate", 10),
         sourceVisitId: strOrNull(fd, "sourceVisitId", 40),
         confirmed: bool(fd, "confirmed"),
       },
