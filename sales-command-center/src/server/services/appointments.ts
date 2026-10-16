@@ -9,7 +9,7 @@ import { notify, notifyCoordinators } from "./notifications";
 import { findConflicts, findDuplicate, validateTimes } from "@/lib/domain/appointments";
 import { blocksOutreach, advanceStatus } from "@/lib/domain/rollups";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/labels";
-import { fmtDateTime } from "@/lib/time";
+import { apptDateTime, dateKeyInTz, dayRangeUtc, fmtDateTime } from "@/lib/time";
 import { getSettings } from "../settings";
 
 export const appointmentSchema = z.object({
@@ -79,10 +79,17 @@ export async function createAppointment(actor: Actor, raw: z.input<typeof appoin
  * Move an appointment directly (coordinator only — reps request changes instead).
  * The appointment row stays the same scheduling event; the old time is kept in AppointmentChange.
  */
-export async function moveAppointmentInTx(tx: Tx, actor: Actor, id: string, startAt: Date, endAt: Date, reason: string | null, opts: { allowOverlap?: boolean; rescheduleRequestId?: string; expectedVersion?: number } = {}) {
+export async function moveAppointmentInTx(tx: Tx, actor: Actor, id: string, startAt: Date, endAt: Date, reason: string | null, opts: { allowOverlap?: boolean; rescheduleRequestId?: string; expectedVersion?: number; untimed?: boolean } = {}) {
   if (!opts.rescheduleRequestId) assertCan(actor, "appointment.moveDirect", "Sales reps request schedule changes — the coordinator approves them.");
-  const err = validateTimes(startAt, endAt);
-  if (err) throw invalid(err);
+  if (opts.untimed) {
+    // moved to another day without a time (calendar all-day row): keep it a whole local day
+    const tzs = (await getSettings(tx)).timezone;
+    const day = dateKeyInTz(startAt, tzs);
+    ({ start: startAt, end: endAt } = dayRangeUtc(day, day, tzs));
+  } else {
+    const err = validateTimes(startAt, endAt);
+    if (err) throw invalid(err);
+  }
   const appt = await tx.appointment.findUnique({ where: { id }, include: { lead: true, rep: true } });
   if (!appt) throw notFound("Appointment");
   if (!ACTIVE_APPOINTMENT_STATUSES.includes(appt.status)) throw invalid("Only scheduled or confirmed appointments can be moved.");
@@ -91,17 +98,17 @@ export async function moveAppointmentInTx(tx: Tx, actor: Actor, id: string, star
   const nearby = await tx.appointment.findMany({ where: { id: { not: id }, status: { in: ACTIVE_APPOINTMENT_STATUSES }, OR: [{ repId: appt.repId }, { leadId: appt.leadId }], startAt: { gte: new Date(startAt.getTime() - 86_400_000), lte: new Date(endAt.getTime() + 86_400_000) } } });
   const dup = findDuplicate({ id, leadId: appt.leadId, startAt }, nearby, settings.duplicateAppointmentWindowMinutes);
   if (dup) throw conflict(`${appt.lead.businessName} already has another active appointment at ${fmtDateTime(dup.startAt, settings.timezone)}.`);
-  const overlaps = findConflicts({ id, repId: appt.repId, startAt, endAt }, nearby);
+  const overlaps = findConflicts({ id, repId: appt.repId, startAt, endAt, timeSet: !opts.untimed }, nearby);
   if (overlaps.length && !opts.allowOverlap) throw conflict(`Time conflict with ${overlaps.length} other appointment(s) for ${appt.rep.name}. Tick “Book anyway” to keep both.`, { conflicts: overlaps.map((o) => o.id) });
-  const updated = await tx.appointment.updateMany({ where: { id, version: appt.version }, data: { startAt, endAt, version: { increment: 1 } } });
+  const updated = await tx.appointment.updateMany({ where: { id, version: appt.version }, data: { startAt, endAt, timeSet: !opts.untimed, version: { increment: 1 } } });
   if (!updated.count) throw conflict("This appointment was just changed by someone else. Reload and try again.");
   await tx.appointmentChange.create({ data: { appointmentId: id, action: "MOVED", fromStart: appt.startAt, fromEnd: appt.endAt, toStart: startAt, toEnd: endAt, reason, changedById: actor.id, rescheduleRequestId: opts.rescheduleRequestId ?? null } });
-  await audit(tx, actor, "appointment.moved", { type: "Appointment", id, leadId: appt.leadId }, `Appointment rescheduled: ${fmtDateTime(appt.startAt, settings.timezone)} → ${fmtDateTime(startAt, settings.timezone)}${reason ? ` (${reason})` : ""}`);
-  if (appt.repId !== actor.id) await notify(tx, appt.repId, { type: "APPOINTMENT_UPCOMING", title: `Appointment moved: ${appt.lead.businessName}`, body: `Now ${fmtDateTime(startAt, settings.timezone)} (was ${fmtDateTime(appt.startAt, settings.timezone)})`, link: `/appointments/${id}`, dedupeKey: `appt-moved:${id}:${startAt.toISOString()}` });
+  await audit(tx, actor, "appointment.moved", { type: "Appointment", id, leadId: appt.leadId }, `Appointment rescheduled: ${apptDateTime(appt, settings.timezone)} → ${apptDateTime({ startAt, endAt, timeSet: !opts.untimed }, settings.timezone)}${reason ? ` (${reason})` : ""}`);
+  if (appt.repId !== actor.id) await notify(tx, appt.repId, { type: "APPOINTMENT_UPCOMING", title: `Appointment moved: ${appt.lead.businessName}`, body: `Now ${apptDateTime({ startAt, endAt, timeSet: !opts.untimed }, settings.timezone)} (was ${apptDateTime(appt, settings.timezone)})`, link: `/appointments/${id}`, dedupeKey: `appt-moved:${id}:${startAt.toISOString()}` });
   await refreshLeadRollups(tx, appt.leadId);
 }
 
-export async function moveAppointment(actor: Actor, id: string, startAt: Date, endAt: Date, reason: string | null, opts: { allowOverlap?: boolean; expectedVersion?: number } = {}) {
+export async function moveAppointment(actor: Actor, id: string, startAt: Date, endAt: Date, reason: string | null, opts: { allowOverlap?: boolean; expectedVersion?: number; untimed?: boolean } = {}) {
   return prisma.$transaction(async (tx) => {
     // a direct move resolves any pending request for this appointment
     const pending = await tx.rescheduleRequest.findMany({ where: { appointmentId: id, status: "PENDING" } });

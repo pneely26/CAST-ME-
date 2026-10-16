@@ -137,4 +137,48 @@ describe.skipIf(!TEST_URL)("lead imports (database)", () => {
     review = await imp.getBatchForReview(U.coordinator, batch.id);
     expect(review.records[0].values).toMatchObject({ businessName: "River Books", phone: "312-555-0177" });
   });
+
+  it("appointment-log exports: one lead per prospect #, dated appointments, every other column kept, re-import safe", async () => {
+    const H = "APPTDATE,PN,APPT,APPTTIME,BC,Region,COMPANY,ADDRESS,CITY,ST,ZIP,PHONE,Name,EmployeeCount,SitComments,Frame18,Frame113,Option120,Option122,Text124,Combo23,Text129,Text131,Text133,Text137,Combo141";
+    const rows = [
+      "06-May-26,900000001,1,06-May-26,104040,SW,Zephyr Test Roofing,1 Sample Rd,Lexington,KY,405040001,(859) 555-0141,Ann Example,12,,,,False,False,SMS,\"Rep, Riley\",CONFIRMED,06-May-26,DR,2,BC Dept",
+      "01-Jul-26,900000001,2,02-Jan-00,104040,SW,Zephyr Test Roofing,1 Sample Rd,Lexington,KY,405040001,(859) 555-0141,Ann Example,12,,1.0,,False,False,SMS,\"Rep, Riley\",,01-Jul-26,DR,2,BC Dept",
+      "30-Jun-26,900000002,1,02-Jan-00,104040,SW,Quillon Test Heating,2 Sample Rd,Richmond,KY,40475,(859) 555-0142,Bo Example,,,,,False,False,SMS,\"Mozzano, Louis\",CONFIRMED,30-Jun-26,HC,2,BC Dept",
+    ];
+    const file = () => new File([[H, ...rows].join("\n")], "Rep_Leads.csv", { type: "text/csv" });
+    const batch = await imp.createCsvBatch(U.coordinator, file());
+    const meta = imp.csvMeta(batch)!;
+    expect(meta.preset).toBe("Appointment log export");
+    expect(meta.mapping).toMatchObject({ APPTDATE: "appointmentDate", PN: "externalId", COMPANY: "businessName", Name: "contactName", ST: "state", EmployeeCount: "employeeCount", Combo23: "repName", Text129: "appointmentStatus", BC: "", Region: "" });
+    const review = await imp.getBatchForReview(U.coordinator, batch.id, { view: "all" });
+    expect(review.records[0].values.zip).toBe("40504-0001"); // same digits, shown as ZIP+4
+    expect(review.records[0].values.appointmentTime ?? null).toBeNull(); // "06-May-26" in a time column isn't a time
+    expect(review.records[1].follower).toBe(true);
+    expect(review.records[0].rep?.id).toBe(U.rep.id); // "Rep, Riley" → Riley Rep
+    expect(review.records[2].rep).toBeNull();
+    expect(review.records[2].flags.some((f) => f.message.includes("isn't a sales rep login"))).toBe(true);
+    expect(review.counts.clean).toBe(3);
+
+    const res = await imp.importCleanRows(U.coordinator, batch.id, { assignedRepId: U.rep2.id });
+    expect(res).toMatchObject({ imported: 2, merged: 1, appointments: 3, failed: 0, left: 0 });
+    const zephyr = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000001" }, include: { appointments: { orderBy: { startAt: "asc" } } } });
+    expect(zephyr).toMatchObject({ businessName: "Zephyr Test Roofing", contactName: "Ann Example", employeeCount: 12, zip: "40504-0001", assignedRepId: U.rep.id });
+    expect(zephyr.appointments.map((a) => [a.status, a.timeSet, a.repId])).toEqual([["CONFIRMED", false, U.rep.id], ["SCHEDULED", false, U.rep.id]]);
+    expect(zephyr.sourceDetails).toMatchObject({ APPT: "1", BC: "104040", Region: "SW", Text133: "DR", Combo141: "BC Dept", Option120: "False" });
+    expect(Object.keys(zephyr.sourceDetails as object)).not.toContain("COMPANY");
+    const quillon = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000002" }, include: { appointments: true } });
+    expect(quillon.assignedRepId).toBe(U.rep2.id); // unknown rep in file → the default chosen for the import
+    expect(quillon.appointments[0].status).toBe("CONFIRMED");
+    // one summary notification per rep, not one per lead
+    expect(await prisma.notification.count({ where: { dedupeKey: { startsWith: `import-assign:${batch.id}:` } } })).toBe(2);
+
+    // the same file again (e.g. an updated export): nothing is duplicated
+    const leadsBefore = await prisma.lead.count();
+    const apptsBefore = await prisma.appointment.count();
+    const again = await imp.createCsvBatch(U.coordinator, file());
+    const r2 = await imp.importCleanRows(U.coordinator, again.id);
+    expect(r2).toMatchObject({ imported: 0, merged: 3, appointments: 0 });
+    expect(await prisma.lead.count()).toBe(leadsBefore);
+    expect(await prisma.appointment.count()).toBe(apptsBefore);
+  });
 });

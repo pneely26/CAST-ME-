@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AnthropicVisionProvider } from "@/server/extraction/anthropic";
-import { autoMapHeaders, applyMapping, reviewFlags, isClean } from "@/lib/domain/imports";
+import { autoMapHeaders, applyMapping, reviewFlags, isClean, parseLooseDate, parseLooseTime, parseApptStatus, normalizePersonName } from "@/lib/domain/imports";
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]);
 
@@ -57,5 +57,29 @@ describe("import mapping and review flags", () => {
     expect(f.map((x) => x.message)).toEqual(expect.arrayContaining(["Phone number looks incomplete", "No address in the source — left blank"]));
     expect(isClean(f)).toBe(false);
     expect(isClean(reviewFlags({ businessName: "Cafe", phone: "312-555-0101", address: "1 Main" }, { businessName: "high" }))).toBe(true);
+  });
+});
+
+describe("appointment log parsing", () => {
+  it("reads dates in the formats exports use, and nothing else", () => {
+    expect(parseLooseDate("27-Feb-26")).toBe("2026-02-27");
+    expect(parseLooseDate("6/5/2026")).toBe("2026-06-05");
+    expect(parseLooseDate("2026-10-15")).toBe("2026-10-15");
+    expect(parseLooseDate("Oct 15, 2026")).toBe("2026-10-15");
+    expect(parseLooseDate("31-Feb-26")).toBeNull();
+    expect(parseLooseDate("soon")).toBeNull();
+  });
+  it("only takes a time of day when one is present", () => {
+    expect(parseLooseTime("10:30 AM")).toBe("10:30");
+    expect(parseLooseTime("2:05pm")).toBe("14:05");
+    expect(parseLooseTime("02-Jan-00")).toBeNull();
+    expect(parseLooseTime("1/2/2000 9:15 AM")).toBe("09:15");
+  });
+  it("maps status words and names", () => {
+    expect(parseApptStatus("CONFIRMED")).toBe("CONFIRMED");
+    expect(parseApptStatus("")).toBe("SCHEDULED");
+    expect(parseApptStatus("Cancelled")).toBe("CANCELED");
+    expect(parseApptStatus("maybe")).toBeNull();
+    expect(normalizePersonName("Mozzano, Louis")).toBe(normalizePersonName("Louis Mozzano"));
   });
 });

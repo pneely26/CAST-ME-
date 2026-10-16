@@ -8,14 +8,16 @@ export interface ApptLike {
   startAt: Date;
   endAt: Date;
   status: AppointmentStatus;
+  timeSet?: boolean;
 }
 
 export const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => aStart < bEnd && bStart < aEnd;
 
-/** Other active appointments for the same rep whose time overlaps. */
-export function findConflicts(candidate: { id?: string; repId: string; startAt: Date; endAt: Date }, existing: ApptLike[]): ApptLike[] {
+/** Other active appointments for the same rep whose time overlaps. Appointments without a set time never conflict. */
+export function findConflicts(candidate: { id?: string; repId: string; startAt: Date; endAt: Date; timeSet?: boolean }, existing: ApptLike[]): ApptLike[] {
+  if (candidate.timeSet === false) return [];
   return existing.filter(
-    (e) => e.id !== candidate.id && e.repId === candidate.repId && ACTIVE_APPOINTMENT_STATUSES.includes(e.status) && overlaps(candidate.startAt, candidate.endAt, e.startAt, e.endAt),
+    (e) => e.id !== candidate.id && e.repId === candidate.repId && e.timeSet !== false && ACTIVE_APPOINTMENT_STATUSES.includes(e.status) && overlaps(candidate.startAt, candidate.endAt, e.startAt, e.endAt),
   );
 }
 

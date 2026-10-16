@@ -176,3 +176,19 @@ export function fmtClock(t: string | null | undefined): string {
   const [h, m] = t.split(":").map(Number);
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
+
+/** Appointment times. `timeSet: false` means only the date is known (shown as "time not set", never as midnight). */
+type ApptTimes = { startAt: Date; endAt: Date; timeSet?: boolean | null };
+const untimed = (a: ApptTimes) => a.timeSet === false;
+export function apptTime(a: ApptTimes, tz: string): string {
+  return untimed(a) ? "Time not set" : fmtTime(a.startAt, tz);
+}
+export function apptTimeRange(a: ApptTimes, tz: string): string {
+  return untimed(a) ? "Time not set" : `${fmtTime(a.startAt, tz)}–${fmtTime(a.endAt, tz)}`;
+}
+export function apptDateTime(a: ApptTimes, tz: string): string {
+  return untimed(a) ? `${fmtDate(a.startAt, tz, { month: "short", day: "numeric" })} · time not set` : fmtDateTime(a.startAt, tz);
+}
+export function apptRange(a: ApptTimes, tz: string): string {
+  return untimed(a) ? `${fmtDate(a.startAt, tz, { weekday: "short", month: "short", day: "numeric", year: "numeric" })} · time not set` : `${fmtDateTime(a.startAt, tz)}–${fmtTime(a.endAt, tz)}`;
+}

@@ -61,13 +61,12 @@ export async function GET(req: Request) {
     events.push({
       id: `appt:${a.id}`,
       title: `${a.kind === "FOLLOW_UP_VISIT" ? "↻ " : ""}${a.lead.businessName}${!repId ? ` (${a.rep.name.split(" ")[0]})` : ""}${a.status !== "SCHEDULED" ? ` · ${APPOINTMENT_STATUS_LABEL[a.status]}` : ""}${moved ? " · rescheduled" : ""}${a.reschedules.length ? " · change requested" : ""}`,
-      start: a.startAt.toISOString(),
-      end: a.endAt.toISOString(),
+      ...(a.timeSet ? { start: a.startAt.toISOString(), end: a.endAt.toISOString() } : { start: dateKeyInTz(a.startAt, tz), end: addDays(dateKeyInTz(a.startAt, tz), 1), allDay: true }),
       editable: active,
       backgroundColor: STATUS_COLOR[a.status],
       borderColor: STATUS_COLOR[a.status],
       classNames: [a.status === "CANCELED" ? "is-canceled" : "", a.kind === "FOLLOW_UP_VISIT" ? "is-followup" : ""].filter(Boolean),
-      extendedProps: { type: "appointment", id: a.id, leadId: a.lead.id, status: a.status },
+      extendedProps: { type: "appointment", id: a.id, leadId: a.lead.id, status: a.status, timeSet: a.timeSet },
     });
   }
   for (const f of followUps) {

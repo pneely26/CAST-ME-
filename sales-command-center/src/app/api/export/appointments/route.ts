@@ -4,7 +4,7 @@ import { listAppointments } from "@/server/services/appointmentQuery";
 import { prisma } from "@/server/db";
 import { csvResponse, toCsv } from "@/lib/csv";
 import { APPOINTMENT_STATUS_LABEL } from "@/lib/labels";
-import { dateKeyInTz, fmtDateTime } from "@/lib/time";
+import { dateKeyInTz, fmtDateTime, apptDateTime } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   await prisma.auditLog.create({ data: { actorId: actor.id, action: "export.appointments", entityType: "Appointment", summary: `Exported ${rows.length} appointment(s) to CSV` } });
   return csvResponse(
     toCsv(rows, [
-      { header: "Start", value: (a) => fmtDateTime(a.startAt, tz) },
+      { header: "Start", value: (a) => apptDateTime(a, tz) },
       { header: "End", value: (a) => fmtDateTime(a.endAt, tz) },
       { header: "Business", value: (a) => a.lead.businessName },
       { header: "Area", value: (a) => a.lead.area?.name },

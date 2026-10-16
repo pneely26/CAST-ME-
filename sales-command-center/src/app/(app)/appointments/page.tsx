@@ -6,7 +6,7 @@ import { sp, type SP } from "@/server/services/leadQuery";
 import { repOptions } from "@/server/options";
 import { Badge, Empty, Flash, PageHeader } from "@/components/ui";
 import { ApptStatusBadge } from "@/components/badges";
-import { fmtDateKey, fmtTime, dateKeyInTz } from "@/lib/time";
+import { fmtDateKey, fmtTime, dateKeyInTz, apptTimeRange } from "@/lib/time";
 
 export const metadata = { title: "Appointments" };
 
@@ -42,7 +42,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
                 {header && <div className="bg-canvas px-4 py-1.5 text-xs font-semibold text-ink-2">{fmtDateKey(day, { weekday: "long", month: "long", day: "numeric" })}</div>}
                 <Link href={`/appointments/${a.id}`} className="flex flex-col gap-1 px-4 py-2.5 hover:bg-canvas sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <div className="font-medium">{fmtTime(a.startAt, tz)}–{fmtTime(a.endAt, tz)} · {a.lead.businessName}</div>
+                    <div className="font-medium">{apptTimeRange(a, tz)} · {a.lead.businessName}</div>
                     <div className="truncate text-xs text-muted">{[a.kind === "FOLLOW_UP_VISIT" ? "Follow-up visit" : "Appointment", a.lead.area?.name, a.location ?? a.lead.address, actor.role === "COORDINATOR" ? a.rep.name : null].filter(Boolean).join(" · ")}</div>
                   </div>
                   <div className="flex flex-wrap gap-1">

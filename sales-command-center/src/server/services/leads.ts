@@ -49,6 +49,21 @@ export const leadInputSchema = z.object({
       return Math.round(n * 100) / 100;
     }),
   notes: optStr(10000),
+  /** ID of this business in another system (e.g. a prospect # from an exported log). */
+  externalId: optStr(60),
+  employeeCount: z
+    .union([z.number(), z.string()])
+    .optional()
+    .nullable()
+    .transform((v, ctx) => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : Number(String(v).replace(/[,\s]/g, ""));
+      if (!Number.isInteger(n) || n < 0 || n > 10_000_000) {
+        ctx.addIssue({ code: "custom", message: "Employees should be a whole number" });
+        return z.NEVER;
+      }
+      return n;
+    }),
   tags: z.array(z.string().trim().min(1).max(40)).max(30).default([]),
 });
 export type LeadInput = z.input<typeof leadInputSchema>;
@@ -97,21 +112,32 @@ export async function checkDuplicates(input: { businessName?: string | null; pho
   return matches.map((m) => ({ ...m, lead: pool.find((p) => p.id === m.id)! }));
 }
 
-export async function createLead(actor: Actor, raw: LeadInput, opts: { allowDuplicate?: boolean; isDemo?: boolean; tx?: Tx; source?: string } = {}) {
+async function assertExternalIdFree(tx: Tx, externalId: string | null, exceptId?: string) {
+  if (!externalId) return;
+  const other = await tx.lead.findUnique({ where: { externalId }, select: { id: true, leadNumber: true, businessName: true } });
+  if (other && other.id !== exceptId) throw conflict(`Prospect / account # ${externalId} already belongs to lead #${other.leadNumber} ${other.businessName}.`, { duplicates: [other.id] });
+}
+
+export async function createLead(
+  actor: Actor,
+  raw: LeadInput,
+  opts: { allowDuplicate?: boolean; isDemo?: boolean; tx?: Tx; source?: string; sourceDetails?: Record<string, string> | null; quiet?: boolean } = {},
+) {
   assertCan(actor, "lead.create", "Only the coordinator can add leads.");
   const d = leadInputSchema.parse(raw);
+  await assertExternalIdFree(opts.tx ?? prisma, d.externalId);
   if (!opts.allowDuplicate) {
     const dups = await checkDuplicates(d);
     if (dups.length) throw conflict(`This looks like an existing lead: ${dups[0].lead.businessName} (#${dups[0].lead.leadNumber}) — ${dups[0].reasons.join(", ").toLowerCase()}.`, { duplicates: dups.map((x) => x.id) });
   }
   const run = async (tx: Tx) => {
     await validateRefs(tx, d);
-    const lead = await tx.lead.create({ data: { ...d, ...derived(d), isDemo: opts.isDemo ?? false } });
+    const lead = await tx.lead.create({ data: { ...d, ...derived(d), isDemo: opts.isDemo ?? false, ...(opts.sourceDetails && Object.keys(opts.sourceDetails).length ? { sourceDetails: opts.sourceDetails } : {}) } });
     await audit(tx, actor, "lead.created", { type: "Lead", id: lead.id, leadId: lead.id }, `Lead created${opts.source ? ` (${opts.source})` : ""}: ${lead.businessName}`);
     if (lead.assignedRepId) {
       await tx.leadAssignment.create({ data: { leadId: lead.id, repId: lead.assignedRepId, assignedById: actor.id } });
       await audit(tx, actor, "lead.assigned", { type: "Lead", id: lead.id, leadId: lead.id }, `Assigned to ${(await tx.user.findUnique({ where: { id: lead.assignedRepId } }))?.name}`);
-      await notify(tx, lead.assignedRepId, { type: "LEAD_ASSIGNED", title: `New lead assigned: ${lead.businessName}`, link: `/leads/${lead.id}`, dedupeKey: `assign:${lead.id}:${lead.assignedRepId}:${Date.now()}` });
+      if (!opts.quiet) await notify(tx, lead.assignedRepId, { type: "LEAD_ASSIGNED", title: `New lead assigned: ${lead.businessName}`, link: `/leads/${lead.id}`, dedupeKey: `assign:${lead.id}:${lead.assignedRepId}:${Date.now()}` });
     }
     return lead;
   };
@@ -140,6 +166,7 @@ export async function updateLead(actor: Actor, id: string, raw: Partial<LeadInpu
   return prisma.$transaction(async (tx) => {
     const d = changes as ReturnType<typeof leadInputSchema.parse>;
     if (isCoordinator(actor)) await validateRefs(tx, d);
+    if (isCoordinator(actor)) await assertExternalIdFree(tx, d.externalId, id);
     const statusChanged = d.status && d.status !== lead.status;
     const assigneeChanged = isCoordinator(actor) && d.assignedRepId !== lead.assignedRepId;
     const data = { ...changes, ...(isCoordinator(actor) ? derived(d) : {}), ...(changes.phone !== undefined ? { normalizedPhone: normalizePhone(d.phone) || null } : {}) };

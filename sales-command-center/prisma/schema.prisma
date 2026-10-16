@@ -232,6 +232,9 @@ model Lead {
   leadNumber        Int          @unique @default(autoincrement())
   businessName      String
   normalizedName    String
+  // ID of this business in another system (e.g. the prospect # "PN" in an exported appointment log)
+  externalId        String?      @unique
+  employeeCount     Int?
   contactName       String?
   jobTitle          String?
   phone             String?
@@ -252,6 +255,8 @@ model Lead {
   estimatedValue    Decimal?     @db.Decimal(12, 2)
   notes             String?
   tags              String[]
+  // columns from an imported file that have no field of their own, kept exactly as they were
+  sourceDetails     Json?
   isDemo            Boolean      @default(false)
   archivedAt        DateTime?
   // optimistic concurrency: incremented on each edit
@@ -351,6 +356,8 @@ model Appointment {
   title       String?
   startAt     DateTime
   endAt       DateTime
+  // false when only the date is known (e.g. imported from a log without times); startAt/endAt span that local day
+  timeSet     Boolean           @default(true)
   status      AppointmentStatus @default(SCHEDULED)
   location    String?
   notes       String?

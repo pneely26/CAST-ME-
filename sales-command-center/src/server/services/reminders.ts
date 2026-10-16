@@ -46,7 +46,7 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
 
   const soon = new Date(now.getTime() + s.reminderMinutesBefore * 60_000);
   const appts = await prisma.appointment.findMany({
-    where: { status: { in: ACTIVE_APPOINTMENT_STATUSES }, startAt: { gte: now, lte: soon }, rep: { active: true } },
+    where: { status: { in: ACTIVE_APPOINTMENT_STATUSES }, timeSet: true, startAt: { gte: now, lte: soon }, rep: { active: true } },
     include: { lead: { select: { id: true, businessName: true, address: true } } },
   });
   for (const a of appts) {

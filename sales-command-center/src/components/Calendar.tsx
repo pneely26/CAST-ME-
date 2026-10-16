@@ -43,9 +43,12 @@ export function Calendar({ timeZone, role, repId, initialDate, initialView = "ti
       router.refresh();
       return;
     }
-    let r = await fetch("/api/appointments/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, start, end }) }).then((x) => x.json());
+    // dropped on the all-day row = a date without a set time; dropped on a time slot = that time
+    const allDay = event.allDay;
+    const end2 = allDay ? start : end;
+    let r = await fetch("/api/appointments/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, start, end: end2, allDay }) }).then((x) => x.json());
     if (!r.ok && r.code === "CONFLICT" && r.details?.conflicts && window.confirm(`${r.error}\n\nBook anyway?`)) {
-      r = await fetch("/api/appointments/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, start, end, allowOverlap: true }) }).then((x) => x.json());
+      r = await fetch("/api/appointments/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, start, end: end2, allDay, allowOverlap: true }) }).then((x) => x.json());
     }
     if (!r.ok) {
       revert();
@@ -60,7 +63,7 @@ export function Calendar({ timeZone, role, repId, initialDate, initialView = "ti
   return (
     <div className="card p-3">
       <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted">
-        <span className="inline-flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-gray-500" /> Territory plan (all-day row)</span>
+        <span className="inline-flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-gray-500" /> All-day row: territory plan, and appointments with no time set</span>
         <span className="inline-flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-blue-600" /> Scheduled</span>
         <span className="inline-flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-[#3451b2]" /> Confirmed</span>
         <span className="inline-flex items-center gap-1"><span aria-hidden className="h-2.5 w-2.5 rounded-sm border-l-2 border-dashed border-amber-600 bg-orange-50" /> Follow-up (↻)</span>
@@ -85,7 +88,7 @@ export function Calendar({ timeZone, role, repId, initialDate, initialView = "ti
         slotMinTime="07:00:00"
         slotMaxTime="20:00:00"
         nowIndicator
-        allDayText="Plan"
+        allDayText="All day"
         editable
         eventDurationEditable
         selectable

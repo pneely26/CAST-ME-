@@ -11,6 +11,8 @@ export function LeadFormFields({ lead, territories, reps, isNew }: { lead?: Part
         <Field label="Business / company name" name="businessName" required defaultValue={lead?.businessName} className="sm:col-span-2" />
         <Field label="Industry / category" name="industry" defaultValue={lead?.industry} />
         <Field label="Lead source" name="source" defaultValue={lead?.source} placeholder="Referral, walk-in, list…" />
+        <Field label="Prospect / account #" name="externalId" defaultValue={lead?.externalId} hint="ID from another system, e.g. PN on an exported log. Used to match re-imports." />
+        <Field label="Employees" name="employeeCount" inputMode="numeric" defaultValue={lead?.employeeCount != null ? String(lead.employeeCount) : ""} />
       </Fieldset>
       <Fieldset title="Contact">
         <Field label="Contact person" name="contactName" defaultValue={lead?.contactName} autoComplete="off" />

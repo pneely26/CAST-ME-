@@ -126,6 +126,13 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
    - Values that aren't visible are left blank, never guessed.
    - With no provider configured, the page says so and you add each lead by hand while viewing the image.
 3. CSV columns are matched to lead fields by their names. You can change the matching.
+   - **Appointment-log exports** (columns like `APPTDATE, PN, COMPANY, …, Combo23, Text129`) are recognized automatically:
+     - **`PN`** becomes the lead's **Prospect / account #**. Rows with the same number become one lead with several appointments.
+     - **`APPTDATE`** becomes an appointment on that date. The file has no times, so it shows as "time not set" until you move it to a time.
+     - **`Text129`** (CONFIRMED) becomes the appointment's status.
+     - **`Combo23`** is matched to a rep login with the same name ("Mozzano, Louis" → Louis Mozzano); otherwise the import's default rep is used.
+   - Columns that aren't matched to a field (BC, Region, Text133, …) are kept on the lead under **Details from import**, exactly as written.
+   - Importing an updated export later fills in what's new and adds new appointments. It never duplicates leads or appointments.
 4. **Review:**
    - Correct values. Missing, invalid and low-confidence values are flagged.
    - Possible duplicates are shown side by side with the existing lead.

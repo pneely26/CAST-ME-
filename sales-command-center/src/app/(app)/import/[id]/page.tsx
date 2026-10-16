@@ -10,8 +10,7 @@ import { Badge, Empty, Flash, PageHeader, Section, Tabs } from "@/components/ui"
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { ExtractRunner } from "@/components/ExtractRunner";
 import { addManualRecordAction, decideRecordAction, importCleanAction, remapCsvAction, retryImageAction } from "@/app/actions/imports";
-import { FIELD_LABEL } from "@/server/extraction/types";
-import { IMPORT_FIELDS, type ImportField } from "@/lib/domain/imports";
+import { IMPORT_FIELDS, IMPORT_FIELD_LABEL as FIELD_LABEL, type ImportField } from "@/lib/domain/imports";
 import { fmtDateTime } from "@/lib/time";
 
 export const metadata = { title: "Review import" };
@@ -45,6 +44,9 @@ function RecordCard({ r, defaults, imageName, back }: { r: Rec; defaults: { rep?
         <span className="font-medium">Row {r.rowNumber}</span>
         <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
         {pending && r.clean && !r.duplicates.length && <Badge tone="good">Ready</Badge>}
+        {pending && r.idMatch && <Badge tone="accent">Updates lead #{r.idMatch.leadNumber}</Badge>}
+        {pending && r.follower && <Badge tone="accent">Same prospect as an earlier row</Badge>}
+        {pending && r.rep && <span className="text-xs text-muted">Rep: {r.rep.name}</span>}
         {pending && !!r.duplicates.length && <Badge tone="bad">Possible duplicate</Badge>}
         {imageName && r.imageId && <a className="text-xs text-muted hover:underline" href={`/api/files/import/${r.imageId}`} target="_blank" rel="noreferrer">from {imageName}</a>}
         {r.lead && <Link className="link ml-auto text-sm" href={`/leads/${r.lead.id}`}>Lead #{r.lead.leadNumber} {r.lead.businessName}</Link>}
@@ -84,6 +86,14 @@ function RecordCard({ r, defaults, imageName, back }: { r: Rec; defaults: { rep?
               );
             })}
           </div>
+          {Object.keys(r.details).length > 0 && (
+            <details className="text-xs text-muted">
+              <summary className="cursor-pointer">Other columns from the file ({Object.keys(r.details).length}) — kept on the lead exactly as written</summary>
+              <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 rounded bg-canvas p-2 sm:grid-cols-4">
+                {Object.entries(r.details).map(([k, val]) => <div key={k} className="min-w-0"><dt className="truncate font-medium text-ink-2">{k}</dt><dd className="truncate">{val}</dd></div>)}
+              </dl>
+            </details>
+          )}
           {r.sourceText && (
             <details className="text-xs text-muted">
               <summary className="cursor-pointer">Source text (as read)</summary>
@@ -221,14 +231,14 @@ export default async function ImportReviewPage({ params, searchParams }: { param
       )}
 
       {meta && (
-        <Section title="Column matching" subtitle="Unmatched columns are ignored. Changing the matching updates rows still under review; corrections you typed are kept.">
+        <Section title="Column matching" subtitle={`${meta.preset ? `Recognized layout: ${meta.preset}. ` : ""}Columns not matched to a field are still kept on each lead under “Details from import”, exactly as written. Changing the matching updates rows still under review; corrections you typed are kept.`}>
           <ActionForm action={remapCsvAction} className="grid gap-2 p-4 sm:grid-cols-3 lg:grid-cols-4">
             <input type="hidden" name="batchId" value={batch.id} />
             {meta.headers.map((h, i) => (
               <label key={h} className="block text-sm">
                 <span className="label truncate" title={h}>{h}</span>
                 <select name={`map_${i}`} defaultValue={meta.mapping[h] ?? ""} className="input">
-                  <option value="">— ignore —</option>
+                  <option value="">— keep as detail —</option>
                   {IMPORT_FIELDS.map((f) => <option key={f} value={f}>{FIELD_LABEL[f]}</option>)}
                 </select>
               </label>

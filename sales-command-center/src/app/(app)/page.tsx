@@ -7,7 +7,7 @@ import { Badge, Empty, PageHeader, Section, Stat } from "@/components/ui";
 import { DueBadge, OutcomeBadge, RescheduleBadge } from "@/components/badges";
 import { RangePicker } from "@/components/RangePicker";
 import { money } from "@/lib/labels";
-import { fmtDate, fmtDateKey, fmtDateTime, fmtTime, resolveRange } from "@/lib/time";
+import { fmtDate, fmtDateKey, fmtDateTime, fmtTime, resolveRange, apptTime, apptDateTime } from "@/lib/time";
 
 export const metadata = { title: "Dashboard" };
 
@@ -73,7 +73,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <ul className="divide-y divide-line-2">
               {d.todayAppointments.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                  <div className="min-w-0"><Link href={`/leads/${a.lead.id}`} className="font-medium hover:underline">{a.lead.businessName}</Link><div className="text-xs text-muted">{fmtTime(a.startAt, tz)} appointment{isRep ? "" : ` · ${a.rep.name}`}</div></div>
+                  <div className="min-w-0"><Link href={`/leads/${a.lead.id}`} className="font-medium hover:underline">{a.lead.businessName}</Link><div className="text-xs text-muted">{apptTime(a, tz)} appointment{isRep ? "" : ` · ${a.rep.name}`}</div></div>
                   <Badge tone="accent">Appointment</Badge>
                 </li>
               ))}
@@ -92,7 +92,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <ul className="divide-y divide-line-2">
               {d.upcoming.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                  <div className="min-w-0"><Link href={`/appointments/${a.id}`} className="font-medium hover:underline">{a.lead.businessName}</Link><div className="text-xs text-muted">{fmtDateTime(a.startAt, tz)}{isRep ? "" : ` · ${a.rep.name}`}</div></div>
+                  <div className="min-w-0"><Link href={`/appointments/${a.id}`} className="font-medium hover:underline">{a.lead.businessName}</Link><div className="text-xs text-muted">{apptDateTime(a, tz)}{isRep ? "" : ` · ${a.rep.name}`}</div></div>
                   <Badge tone={a.status === "CONFIRMED" ? "accent" : "info"}>{a.status === "CONFIRMED" ? "Confirmed" : "Scheduled"}</Badge>
                 </li>
               ))}

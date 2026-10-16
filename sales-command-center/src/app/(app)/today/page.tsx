@@ -10,7 +10,7 @@ import { LeadStatusBadge } from "@/components/badges";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { stopAction } from "@/app/actions/schedule";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/labels";
-import { dateKeyInTz, dayRangeUtc, fmtClock, fmtDate, fmtDateKey, fmtTime } from "@/lib/time";
+import { dateKeyInTz, dayRangeUtc, fmtClock, fmtDate, fmtDateKey, fmtTime, apptTime } from "@/lib/time";
 
 export const metadata = { title: "Today's route" };
 
@@ -49,7 +49,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             {appointments.map((a) => (
               <li key={a.id} className="card p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0"><div className="font-semibold">{fmtTime(a.startAt, tz)} · {a.lead.businessName}</div><div className="truncate text-sm text-muted">{a.location ?? a.lead.address}</div></div>
+                  <div className="min-w-0"><div className="font-semibold">{apptTime(a, tz)} · {a.lead.businessName}</div><div className="truncate text-sm text-muted">{a.location ?? a.lead.address}</div></div>
                   <Badge tone={a.status === "COMPLETED" ? "good" : a.status === "NO_SHOW" ? "bad" : "accent"}>{a.status === "COMPLETED" ? "Done" : a.status === "NO_SHOW" ? "No-show" : "Appointment"}</Badge>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
