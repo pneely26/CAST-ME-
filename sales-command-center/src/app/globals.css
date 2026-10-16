@@ -45,3 +45,25 @@ body { -webkit-font-smoothing: antialiased; }
 .fc .fc-event { cursor: pointer; }
 .fc-event.is-canceled { opacity: 0.55; text-decoration: line-through; }
 .fc-event.is-followup { border-left: 3px dashed #b45309 !important; }
+
+/* iOS Safari: native date/time inputs ignore width:100% (overflowing their column) and collapse when empty */
+input[type="date"].input,
+input[type="time"].input,
+input[type="datetime-local"].input {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.375rem;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.25rem;
+}
+label:has(> input[type="date"]),
+label:has(> input[type="time"]) {
+  min-width: 0;
+}
