@@ -22,7 +22,7 @@ export function diff<T extends Record<string, unknown>>(before: T, after: Partia
   for (const k of Object.keys(after)) {
     const a = before[k];
     const b = after[k];
-    const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v && typeof v === "object" && "toFixed" in (v as object) ? String(v) : Array.isArray(v) ? JSON.stringify(v) : (v ?? null));
+    const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v && typeof v === "object" && "toFixed" in (v as object) ? Number(v) : Array.isArray(v) ? JSON.stringify(v) : (v ?? null));
     if (norm(a) !== norm(b)) out[k] = [norm(a), norm(b)];
   }
   return out;

@@ -37,6 +37,7 @@ const REP_NAV: Item[] = [
   { href: "/visits", label: "My Visits", icon: "✎" },
   { href: "/follow-ups", label: "Follow-ups", icon: "↻", badge: "followUpsDue" },
   { href: "/sales", label: "My Sales", icon: "$" },
+  { href: "/reports", label: "My Reports", icon: "▥" },
 ];
 
 const REP_TABS: Item[] = [
