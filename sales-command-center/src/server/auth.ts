@@ -49,6 +49,12 @@ export async function login(email: string, password: string, clientKey: string):
     return { ok: false, error: user && !user.active ? "This account is deactivated." : "Incorrect email or password." };
   }
   attempts.delete(k);
+  await setSessionCookie(user);
+  return { ok: true };
+}
+
+/** Issue (or re-issue) the signed session cookie for a user. */
+export async function setSessionCookie(user: { id: string; role: "COORDINATOR" | "REP"; sessionVersion: number }) {
   const token = await signSession({ uid: user.id, role: user.role, sv: user.sessionVersion });
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -57,7 +63,6 @@ export async function login(email: string, password: string, clientKey: string):
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });
-  return { ok: true };
 }
 
 export async function logout() {
