@@ -219,4 +219,20 @@ describe.skipIf(!TEST_URL)("lead imports (database)", () => {
     expect(by["City Test Garage"].territory?.name).toBe("Tennessee");
     expect(await prisma.area.count({ where: { name: "Lexington" } })).toBe(1);
   });
+
+  it("re-uploading a file already imported without areas fills in each lead's city area and duplicates nothing", async () => {
+    const H = "APPTDATE,PN,COMPANY,ADDRESS,CITY,ST,ZIP,PHONE,Name,Combo23,Text129";
+    const csv = `${H}\n06-May-26,900000777,Reupload Test Signs,5 Sample Rd,Corbin,KY,40701,(606) 555-0177,Di Example,"Rep, Riley",CONFIRMED`;
+    const first = await imp.createCsvBatch(U.coordinator, new File([csv], "a.csv"));
+    await imp.importCleanRows(U.coordinator, first.id, { areaId: "none" });
+    const before = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000777" } });
+    expect(before.areaId).toBeNull();
+    const counts = [await prisma.lead.count(), await prisma.appointment.count(), await prisma.visit.count()];
+    const again = await imp.createCsvBatch(U.coordinator, new File([csv], "a.csv"));
+    await imp.importCleanRows(U.coordinator, again.id, { areaId: imp.AREA_BY_CITY });
+    const after = await prisma.lead.findUniqueOrThrow({ where: { externalId: "900000777" }, include: { area: true, territory: true } });
+    expect(after.area?.name).toBe("Corbin");
+    expect(after.territory?.name).toBe("Kentucky");
+    expect([await prisma.lead.count(), await prisma.appointment.count(), await prisma.visit.count()]).toEqual(counts);
+  });
 });
