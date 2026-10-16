@@ -4,6 +4,7 @@
   "private": true,
   "description": "Personal casting research & blind-spot tracker. Uses only public, user-provided, or manually entered data.",
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",

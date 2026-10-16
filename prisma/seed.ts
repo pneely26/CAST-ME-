@@ -2,6 +2,7 @@
  * DEMO DATA seed. Every record here is FICTIONAL and flagged isDemo=true so the UI labels it
  * "DEMO DATA". None of it is real casting information. Remove it from Settings → Demo data.
  */
+import "../scripts/load-env";
 import { PrismaClient } from "@prisma/client";
 import { createBreakdown } from "../src/lib/server/records";
 import { runDetection } from "../src/lib/server/detection";

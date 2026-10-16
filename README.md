@@ -13,6 +13,21 @@ Stack: Next.js 15 (App Router, server actions) · TypeScript · Tailwind CSS v4 
 
 ---
 
+## Quick start (Mac)
+
+1. Install **Node.js** (LTS) from https://nodejs.org and **Postgres.app** from https://postgresapp.com. Open Postgres.app and click **Initialize**.
+2. In Terminal:
+   ```bash
+   git clone https://github.com/pneely26/CAST-ME-.git
+   cd CAST-ME-
+   git checkout claude/stewart-blind-spot-build-wp5dih
+   npm run setup
+   ```
+   Setup asks you to choose a password, then installs everything, creates the database, and builds the app. It also offers to load demo data.
+3. Start it with `npm start`, or double-click **Start Stewart Blind Spot.command** in the project folder. Open http://localhost:3000 and sign in as **paige** with your password.
+
+Running `npm run setup` again is safe: it keeps your settings and data. The manual steps below are only needed if you'd rather set things up yourself.
+
 ## Installation
 
 Requirements: **Node.js 20+** (tested on 22), **PostgreSQL 14+** (tested on 16).

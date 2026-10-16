@@ -1,5 +1,6 @@
 // Scheduled monitoring entry point. Example crontab (every 6 hours):
 //   0 */6 * * * cd /path/to/app && npm run monitor >> monitor.log 2>&1
+import "./load-env";
 import { runMonitor } from "../src/lib/server/monitor";
 import { prisma } from "../src/lib/server/db";
 
