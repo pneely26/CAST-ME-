@@ -15,7 +15,7 @@ export function toResult(e: unknown): { ok: false; error: string; code?: string;
   if (e instanceof AppError) return { ok: false, error: e.message, code: e.code, details: e.details };
   if (e && typeof e === "object" && "issues" in e) {
     const issues = (e as { issues: { path: (string | number)[]; message: string }[] }).issues;
-    return { ok: false, error: issues.map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message)).join("; "), code: "VALIDATION" };
+    return { ok: false, error: issues.map((i) => i.message).join(" · "), code: "VALIDATION" };
   }
   // Next.js redirect/notFound must propagate
   if (e && typeof e === "object" && "digest" in e && String((e as { digest: unknown }).digest).startsWith("NEXT_")) throw e;
