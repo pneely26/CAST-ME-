@@ -68,8 +68,6 @@ export const leadInputSchema = z.object({
 });
 export type LeadInput = z.input<typeof leadInputSchema>;
 
-/** Fields a sales rep may edit on their own assigned leads. */
-const REP_EDITABLE = ["contactName", "jobTitle", "phone", "email", "status"] as const;
 
 function derived(d: { businessName: string; phone: string | null; address: string | null; zip: string | null }) {
   return {
@@ -152,17 +150,9 @@ export async function updateLead(actor: Actor, id: string, raw: Partial<LeadInpu
   if (expectedVersion !== undefined && expectedVersion !== lead.version) {
     throw conflict("This lead was changed by someone else since you opened it. Reload the page to see the latest version, then make your edit again.");
   }
-  let changes: Record<string, unknown>;
-  if (isCoordinator(actor)) {
-    const merged = leadInputSchema.parse({ ...pickLead(lead), ...raw });
-    changes = merged;
-  } else {
-    const keys = Object.keys(raw).filter((k) => raw[k as keyof LeadInput] !== undefined);
-    const disallowed = keys.filter((k) => !(REP_EDITABLE as readonly string[]).includes(k));
-    if (disallowed.length) throw forbidden(`Sales reps can't change: ${disallowed.join(", ")}.`);
-    const merged = leadInputSchema.parse({ ...pickLead(lead), ...raw });
-    changes = Object.fromEntries(REP_EDITABLE.map((k) => [k, merged[k]]));
-  }
+  // Lead details and notes are changed only by the coordinator; reps' updates come through visits.
+  assertCan(actor, "lead.edit", "Only the coordinator can change lead details. Record a visit to report what happened.");
+  const changes: Record<string, unknown> = leadInputSchema.parse({ ...pickLead(lead), ...raw });
   return prisma.$transaction(async (tx) => {
     const d = changes as ReturnType<typeof leadInputSchema.parse>;
     if (isCoordinator(actor)) await validateRefs(tx, d);

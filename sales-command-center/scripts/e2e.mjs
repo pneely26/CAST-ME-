@@ -113,8 +113,16 @@ const csv = await c.request.get(base + "/api/export/sales?range=all").then((x) =
 check("sale in CSV export", csv.includes("E2E package") && csv.includes("999.00"));
 
 // 7. security: rep can't open another rep's lead or admin data
-const other = await r.request.get(base + "/api/export/leads?view=all").then((x) => x.text());
-check("rep export only has own leads", !other.includes("(demo)") && other.split("\n").length >= 2);
+for (const kind of ["leads", "visits", "appointments", "sales", "reports"]) {
+  const res = await r.request.get(base + `/api/export/${kind}`);
+  check(`rep blocked from ${kind} export`, res.status() === 403, String(res.status()));
+}
+await r.goto(base + `/leads/${leadId}`);
+check("rep sees no Edit or status controls on a lead", (await r.locator("a", { hasText: /^Edit$/ }).count()) === 0 && (await r.locator("select[name=status]").count()) === 0);
+await r.goto(base + `/leads/${leadId}/edit`);
+check("rep edit page is blocked", (await r.locator("text=Only the coordinator can change lead details").count()) > 0);
+await r.goto(base + "/leads");
+check("rep sees no Export button", (await r.locator("a", { hasText: "Export CSV" }).count()) === 0);
 const audit = await r.request.get(base + "/api/export/audit"); check("rep blocked from audit export", audit.status() === 403);
 const anon = await (await b.newContext()).request.get(base + "/api/export/leads", { maxRedirects: 0 }); check("anonymous blocked", [401, 307, 302].includes(anon.status()), String(anon.status()));
 const cron = await (await b.newContext()).request.post(base + "/api/cron/reminders"); check("cron endpoint not open without the secret", [401, 404].includes(cron.status()), String(cron.status()));

@@ -94,7 +94,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
             {!lead.archivedAt && <Link href={`/leads/${lead.id}/visit`} className="btn-primary">Record visit</Link>}
             {!lead.archivedAt && lead.status !== "DO_NOT_CONTACT" && <Link href={`/appointments/new?lead=${lead.id}`} className="btn-secondary">Schedule appointment</Link>}
             {!lead.archivedAt && <Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">New opportunity</Link>}
-            <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>
+            {isCoord && <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>}
           </>
         }
       />
@@ -173,7 +173,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           </div>
 
           <div className="space-y-5">
-            <Section title="Status">
+            {isCoord && <Section title="Status">
               <ActionForm action={setStatusAction} className="flex gap-2 p-4" confirm={undefined}>
                 <input type="hidden" name="id" value={lead.id} />
                 <select name="status" defaultValue={lead.status} className="input" aria-label="Lead status">
@@ -181,7 +181,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 </select>
                 <SubmitButton className="btn-secondary" confirm="Change this lead's status? Marking Lost, Not a Fit or Do Not Contact cancels open follow-ups and planned visits (history is kept).">Update</SubmitButton>
               </ActionForm>
-            </Section>
+            </Section>}
             <Section title="Upcoming">
               {upcomingAppts.length === 0 && plannedStops.length === 0 ? (
                 <Empty>Nothing scheduled.</Empty>
@@ -231,7 +231,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "contact" && (
-        <Section title="Contact information" action={<Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link>}>
+        <Section title="Contact information" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
           <dl className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
             <KV label="Contact person">{lead.contactName}</KV>
             <KV label="Job title">{lead.jobTitle}</KV>

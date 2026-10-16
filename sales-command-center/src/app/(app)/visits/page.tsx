@@ -23,7 +23,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   const qs = new URLSearchParams({ ...keep, range: range.preset, ...(range.preset === "custom" ? { from: range.startKey, to: range.endKey } : {}) }).toString();
   return (
     <div className="space-y-4">
-      <PageHeader title={isCoord ? "Visits & Feedback" : "My Visits"} subtitle={`${visits.length} visit record(s) · ${range.label}`} actions={<a className="btn-secondary" href={`/api/export/visits?${qs}`}>Export CSV</a>} />
+      <PageHeader title={isCoord ? "Visits & Feedback" : "My Visits"} subtitle={`${visits.length} visit record(s) · ${range.label}`} actions={isCoord ? <a className="btn-secondary" href={`/api/export/visits?${qs}`}>Export CSV</a> : undefined} />
       <Flash message={sp(params, "msg")} />
       <RangePicker range={range} basePath="/visits" extra={keep} />
       <form method="get" className="card grid grid-cols-2 gap-3 p-3 md:grid-cols-5">

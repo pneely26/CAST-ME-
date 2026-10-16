@@ -47,6 +47,7 @@ export default async function RecordVisitPage({ params, searchParams }: { params
         reps={reps}
         defaultRepId={lead.assignedRepId}
         contactName={lead.contactName}
+        canSetStatus={actor.role === "COORDINATOR"}
       />
     </div>
   );

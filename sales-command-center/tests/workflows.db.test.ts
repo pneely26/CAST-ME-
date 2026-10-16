@@ -96,17 +96,22 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("DO_NOT_CONTACT");
   });
 
-  it("server-side permissions: reps are limited to their own leads and allowed fields", async () => {
+  it("server-side permissions: reps can't change leads or their notes, only report through visits", async () => {
     const mine = await newLead("Rep One Shop", U.rep.id);
     const theirs = await newLead("Rep Two Shop", U.rep2.id);
     await expect(svc.visits.recordVisit(U.rep, { leadId: theirs.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(/isn't assigned to you/);
-    await expect(svc.leads.updateLead(U.rep, mine.id, { businessName: "Renamed" })).rejects.toThrow(/can't change/);
+    await expect(svc.leads.updateLead(U.rep, mine.id, { businessName: "Renamed" })).rejects.toThrow(/Only the coordinator can change lead details/);
+    await expect(svc.leads.updateLead(U.rep, mine.id, { phone: "773-555-0142" })).rejects.toThrow(/Only the coordinator/);
+    await expect(svc.leads.updateLead(U.rep, mine.id, { notes: "rep note" })).rejects.toThrow(/Only the coordinator/);
+    await expect(svc.leads.setLeadStatus(U.rep, mine.id, "INTERESTED")).rejects.toThrow(/Only the coordinator/);
     await expect(svc.leads.archiveLeads(U.rep, [mine.id], true)).rejects.toThrow(/coordinator/);
     await expect(svc.leads.assignLeads(U.rep, [mine.id], U.rep.id)).rejects.toThrow(/coordinator/);
     await expect(svc.leads.createLead(U.rep, { businessName: "Sneaky" })).rejects.toThrow(/coordinator/);
     await expect(svc.appts.setAppointmentStatus(U.rep, (await svc.appts.createAppointment(U.rep, { leadId: mine.id, startAt: future(200), endAt: future(201) })).id, "CANCELED", "nah")).rejects.toThrow(/can't cancel/);
-    const updated = await svc.leads.updateLead(U.rep, mine.id, { phone: "773-555-0142", status: "CONTACT_ATTEMPTED" });
-    expect(updated.normalizedPhone).toBe("7735550142");
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: mine.id } })).notes).toBeNull();
+    // a rep's visit can't pick its own lead status — the automatic rule applies
+    await svc.visits.recordVisit(U.rep, { leadId: mine.id, visitAt: new Date(Date.now() - 60_000), type: "WALK_IN", outcome: "LEFT_INFORMATION", newStatus: "WON" });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: mine.id } })).status).not.toBe("WON");
   });
 
   it("concurrent edits: a stale version is rejected instead of overwriting", async () => {

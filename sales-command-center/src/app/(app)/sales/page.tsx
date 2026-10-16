@@ -56,7 +56,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4">
-      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<><a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a><Link className="btn-primary" href="/sales/new">New opportunity</Link></>} />
+      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<>{isCoord && <a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a>}<Link className="btn-primary" href="/sales/new">New opportunity</Link></>} />
       <Flash message={sp(params, "msg")} />
       <RangePicker range={range} basePath="/sales" extra={keep} allowAll />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

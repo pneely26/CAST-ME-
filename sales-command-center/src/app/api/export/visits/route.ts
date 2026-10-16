@@ -1,3 +1,4 @@
+import { can } from "@/server/policy";
 import { getActor } from "@/server/auth";
 import { getSettings } from "@/server/settings";
 import { listVisits } from "@/server/services/visitQuery";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const actor = await getActor();
   if (!actor) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(actor, "data.export")) return Response.json({ error: "Only the coordinator can export data." }, { status: 403 });
   const tz = (await getSettings()).timezone;
   const params = Object.fromEntries(new URL(req.url).searchParams);
   const range = resolveRange(params.range ?? "month", params.from, params.to, tz);

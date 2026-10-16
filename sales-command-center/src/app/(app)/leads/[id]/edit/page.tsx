@@ -4,7 +4,7 @@ import { prisma } from "@/server/db";
 import { assertLeadAccess, can } from "@/server/policy";
 import { territoryOptions } from "@/server/services/territories";
 import { repOptions } from "@/server/options";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Empty } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { LeadFormFields } from "@/components/LeadForm";
 import { Field, Fieldset, Select } from "@/components/fields";
@@ -24,6 +24,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
     notFound();
   }
   const isCoord = can(actor, "lead.editAll");
+  if (!can(actor, "lead.edit")) return <div className="card"><Empty>Only the coordinator can change lead details. Record a visit to report what happened.</Empty></div>;
   const [territories, reps] = isCoord ? await Promise.all([territoryOptions(), repOptions()]) : [[], []];
   return (
     <div className="max-w-4xl">
