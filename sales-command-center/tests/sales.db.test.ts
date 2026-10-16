@@ -90,4 +90,15 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
     await opps.archiveOpportunity(U.coordinator, won.id, true);
     expect((await reports.salesReport(U.coordinator, {}, all)).summary.revenue).toBe(before);
   });
+
+  it("sale tracking: Signed 44, run date and GO status are saved, editable by the rep, and audited", async () => {
+    const lead = await newLead("Tracking Fields Diner");
+    await expect(opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", runDate: "next week" })).rejects.toThrow(/Run date/);
+    const o = await opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, confirmed: true, signed44: true, runDate: "2026-11-03", goStatus: "GO — waiting on install crew" });
+    expect(o).toMatchObject({ signed44: true, runDate: "2026-11-03", goStatus: "GO — waiting on install crew" });
+    const o2 = await opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, signed44: true, runDate: "2026-11-10", goStatus: "GO" }, o.version);
+    expect(o2.runDate).toBe("2026-11-10");
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { entityId: o.id, action: "opportunity.updated" } });
+    expect(log.summary).toMatch(/runDate/);
+  });
 });

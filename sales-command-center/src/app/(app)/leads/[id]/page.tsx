@@ -13,7 +13,7 @@ import { setStatusAction, archiveLeadAction, assignLeadAction } from "@/app/acti
 import { createFollowUpAction, followUpStatusAction } from "@/app/actions/followups";
 import { CLOSED_STATUSES, INTEREST_LABEL, LEAD_STATUSES, LEAD_STATUS_LABEL, VISIT_TYPE_LABEL, money } from "@/lib/labels";
 import { formatPhone } from "@/lib/normalize";
-import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime, visitDateTime } from "@/lib/time";
+import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime, visitDateTime, fmtDateKey } from "@/lib/time";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -343,7 +343,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           {lead.opportunities.length === 0 ? <Empty>No opportunities yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="tbl">
-                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Rep</th></tr></thead>
+                <thead><tr><th>#</th><th>Product / service</th><th>Status</th><th>Estimated</th><th>Final amount</th><th>Opened</th><th>Closed</th><th>Signed 44</th><th>Run date</th><th>GO status</th><th>Rep</th></tr></thead>
                 <tbody>
                   {lead.opportunities.map((o) => (
                     <tr key={o.id}>
@@ -354,6 +354,9 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                       <td>{o.status === "WON" ? money(o.finalAmount ? Number(o.finalAmount) : null) : "—"}</td>
                       <td>{fmtDate(o.openedAt, tz)}</td>
                       <td>{o.closedAt ? fmtDate(o.closedAt, tz) : "—"}</td>
+                      <td>{o.signed44 ? "Yes" : "No"}</td>
+                      <td className="whitespace-nowrap">{o.runDate ? fmtDateKey(o.runDate) : "—"}</td>
+                      <td>{o.goStatus || "—"}</td>
                       <td>{o.rep.name}</td>
                     </tr>
                   ))}

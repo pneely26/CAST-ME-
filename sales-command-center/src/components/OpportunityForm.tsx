@@ -22,6 +22,9 @@ export interface OppDefaults {
   paymentStatus?: string;
   notes?: string;
   lostReason?: string;
+  signed44?: boolean;
+  runDate?: string;
+  goStatus?: string;
   sourceVisitId?: string | null;
 }
 
@@ -71,6 +74,12 @@ export function OpportunityForm({ d, leads, reps, today }: { d: OppDefaults; lea
           </fieldset>
         </>
       )}
+      <fieldset className="grid gap-3 rounded-md border border-line p-3 sm:col-span-2 sm:grid-cols-3">
+        <legend className="label px-1">Sale tracking</legend>
+        <label className="flex items-center gap-2 text-sm sm:pt-6"><input type="checkbox" name="signed44" defaultChecked={d.signed44} className="h-5 w-5" /> Signed 44</label>
+        <label className="block"><span className="label">Run date</span><input type="date" name="runDate" defaultValue={d.runDate} className="input" /><span className="mt-0.5 block text-xs text-muted">When the sold job actually runs</span></label>
+        <label className="block"><span className="label">GO status</span><input name="goStatus" maxLength={300} defaultValue={d.goStatus} className="input" /></label>
+      </fieldset>
       {lost && <label className="block sm:col-span-2"><span className="label">Reason lost</span><input name="lostReason" maxLength={1000} defaultValue={d.lostReason} className="input" /></label>}
       <label className="block sm:col-span-2"><span className="label">Notes</span><textarea name="notes" rows={3} defaultValue={d.notes} className="input" /></label>
       {(won || lost || wasWon) && (

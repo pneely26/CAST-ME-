@@ -547,6 +547,10 @@ model Opportunity {
   paymentStatus    PaymentStatus     @default(NOT_APPLICABLE)
   notes            String?
   sourceVisitId    String?
+  // sale tracking fields
+  signed44         Boolean           @default(false)
+  runDate          String? // local date "YYYY-MM-DD" the sold job actually runs
+  goStatus         String?
   lostReason       String?
   isDemo           Boolean           @default(false)
   archivedAt       DateTime?

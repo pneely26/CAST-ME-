@@ -42,6 +42,9 @@ export const opportunitySchema = z
     paymentStatus: z.enum(PAYMENT_STATUSES as [PaymentStatus, ...PaymentStatus[]]).default("NOT_APPLICABLE"),
     notes: z.string().trim().max(10000).optional().nullable(),
     lostReason: z.string().trim().max(1000).optional().nullable(),
+    signed44: z.boolean().default(false),
+    runDate: z.string().trim().optional().nullable().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Run date must be a date"),
+    goStatus: z.string().trim().max(300, "GO status is too long").optional().nullable(),
     sourceVisitId: z.string().optional().nullable(),
     /** Explicit confirmation for financially significant changes (closing as won/lost, editing a won amount). */
     confirmed: z.boolean().default(false),
@@ -96,6 +99,9 @@ export async function saveOpportunity(actor: Actor, id: string | null, raw: Oppo
       paymentStatus: d.paymentStatus,
       notes: d.notes ?? null,
       lostReason: d.status === "LOST" ? (d.lostReason ?? null) : null,
+      signed44: d.signed44,
+      runDate: d.runDate || null,
+      goStatus: d.goStatus || null,
       sourceVisitId: d.sourceVisitId ?? before?.sourceVisitId ?? null,
     };
     const tz = (await getSettings(tx)).timezone;

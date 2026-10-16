@@ -11,7 +11,7 @@ import { OpportunityForm } from "@/components/OpportunityForm";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { archiveOpportunityAction } from "@/app/actions/sales";
 import { PAYMENT_STATUS_LABEL, money } from "@/lib/labels";
-import { dateKeyInTz, fmtDate, fmtDateTime } from "@/lib/time";
+import { dateKeyInTz, fmtDate, fmtDateTime, fmtDateKey } from "@/lib/time";
 
 export const metadata = { title: "Opportunity" };
 
@@ -49,7 +49,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
             openedAt: key(o.openedAt), expectedCloseAt: key(o.expectedCloseAt), closedAt: key(o.closedAt),
             estimatedValue: o.estimatedValue?.toString(), finalAmount: o.finalAmount?.toString(),
             commissionRatePct: o.commissionRate ? (Number(o.commissionRate) * 100).toString() : undefined, commissionAmount: o.commissionAmount?.toString(),
-            paymentStatus: o.paymentStatus, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId,
+            paymentStatus: o.paymentStatus, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId, signed44: o.signed44, runDate: o.runDate ?? undefined, goStatus: o.goStatus ?? undefined,
           }}
         />
       ) : (
@@ -62,6 +62,9 @@ export default async function OppPage({ params, searchParams }: { params: Promis
               <KV label="Opened">{fmtDate(o.openedAt, tz)}</KV>
               <KV label="Expected close">{fmtDate(o.expectedCloseAt, tz)}</KV>
               <KV label="Actual close">{fmtDate(o.closedAt, tz)}</KV>
+              <KV label="Signed 44">{o.signed44 ? "Yes" : "No"}</KV>
+              <KV label="Run date">{o.runDate ? fmtDateKey(o.runDate) : "—"}</KV>
+              <KV label="GO status">{o.goStatus || "—"}</KV>
               <KV label="Commission">{o.commissionAmount ? money(n(o.commissionAmount), { cents: true }) : o.commissionRate ? `${(Number(o.commissionRate) * 100).toFixed(2)}%` : "Not set"}</KV>
               <KV label="Source visit">{o.sourceVisit ? <Link className="link" href={`/leads/${o.leadId}?tab=visits`}>{fmtDate(o.sourceVisit.visitAt, tz)}</Link> : "—"}</KV>
               {o.lostReason && <KV label="Reason lost">{o.lostReason}</KV>}
