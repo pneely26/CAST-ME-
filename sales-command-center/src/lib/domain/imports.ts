@@ -228,4 +228,35 @@ export function reviewFlags(values: ImportValues, confidence: ImportConfidence |
 
 export const hasBlockingFlag = (flags: ReviewFlag[]) => flags.some((f) => f.level === "error");
 /** "Clean" rows can be imported in bulk: no errors, no low-confidence values, no warnings that need a decision. */
-export const isClean = (flags: ReviewFlag[]) => !flags.some((f) => f.level === "error" || (f.level === "warn" && (f.message.startsWith("Low") || f.message.includes("isn't a US state") || f.message.startsWith("Status"))));
+export const isClean = (flags: ReviewFlag[]) => !flags.some((f) => f.level === "error" || (f.level === "warn" && (f.message.startsWith("Low") || f.message.includes("isn't a US state") || f.message.startsWith("Status") || f.message.includes("looks like a misspelling"))));
+
+function editDistance(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1); // swapped letters
+    }
+  return dp[a.length][b.length];
+}
+
+const cityKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * A city that is probably a misspelling of a more common city (in the same file, or an existing area):
+ * e.g. "Bolwing Green" → "Bowling Green". Only suggests — the reviewer decides; nothing is changed automatically.
+ */
+export function likelyCityTypo(city: string | null | undefined, counts: Map<string, { name: string; count: number }>): string | null {
+  if (!city?.trim()) return null;
+  const key = cityKey(city);
+  const mine = counts.get(key)?.count ?? 0;
+  let best: { name: string; count: number } | null = null;
+  for (const [k, c] of counts) {
+    if (k === key || c.count <= mine) continue;
+    const max = Math.min(key.length, k.length) >= 8 ? 2 : Math.min(key.length, k.length) >= 5 ? 1 : 0;
+    if (max && editDistance(key, k) <= max && (!best || c.count > best.count)) best = c;
+  }
+  return best?.name ?? null;
+}
+export { cityKey };

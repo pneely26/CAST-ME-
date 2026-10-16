@@ -200,4 +200,23 @@ describe.skipIf(!TEST_URL)("lead imports (database)", () => {
     expect(lead.visits).toHaveLength(0);
     expect(lead.status).toBe("APPOINTMENT_SCHEDULED");
   });
+
+  it("places each imported lead in its city's area: reuses existing areas, creates missing ones under the state's territory", async () => {
+    // an area the coordinator already set up, in their own territory
+    const east = await prisma.territory.create({ data: { name: "East KY Route" } });
+    const somerset = await prisma.area.create({ data: { territoryId: east.id, name: "Somerset" } });
+    const csv = "Company,Phone,Address,City,State,Zip\nCity Test Plumbing,(606) 555-0150,1 Main St,SOMERSET,KY,42501\nCity Test Florist,(859) 555-0151,2 Main St,LEXINGTON,KY,40507\nCity Test Bakery,(859) 555-0152,3 Main St,Lexington,KY,40508\nCity Test Garage,(865) 555-0153,4 Main St,Knoxville,TN,37902\n";
+    const batch = await imp.createCsvBatch(U.coordinator, new File([csv], "cities.csv"));
+    const res = await imp.importCleanRows(U.coordinator, batch.id, { areaId: imp.AREA_BY_CITY });
+    expect(res.imported).toBe(4);
+    const leads = await prisma.lead.findMany({ where: { businessName: { startsWith: "City Test" } }, include: { area: true, territory: true } });
+    const by = Object.fromEntries(leads.map((l) => [l.businessName, l]));
+    expect(by["City Test Plumbing"].areaId).toBe(somerset.id); // existing area reused, even with different capitalization
+    expect(by["City Test Plumbing"].territoryId).toBe(east.id);
+    expect(by["City Test Florist"].area?.name).toBe("Lexington");
+    expect(by["City Test Florist"].territory?.name).toBe("Kentucky");
+    expect(by["City Test Bakery"].areaId).toBe(by["City Test Florist"].areaId); // one Lexington area, not two
+    expect(by["City Test Garage"].territory?.name).toBe("Tennessee");
+    expect(await prisma.area.count({ where: { name: "Lexington" } })).toBe(1);
+  });
 });

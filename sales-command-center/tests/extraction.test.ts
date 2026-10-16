@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AnthropicVisionProvider } from "@/server/extraction/anthropic";
-import { autoMapHeaders, applyMapping, reviewFlags, isClean, parseLooseDate, parseLooseTime, parseApptStatus, normalizePersonName } from "@/lib/domain/imports";
+import { autoMapHeaders, applyMapping, reviewFlags, isClean, parseLooseDate, parseLooseTime, parseApptStatus, normalizePersonName, likelyCityTypo } from "@/lib/domain/imports";
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]);
 
@@ -81,5 +81,22 @@ describe("appointment log parsing", () => {
     expect(parseApptStatus("Cancelled")).toBe("CANCELED");
     expect(parseApptStatus("maybe")).toBeNull();
     expect(normalizePersonName("Mozzano, Louis")).toBe(normalizePersonName("Louis Mozzano"));
+  });
+});
+
+describe("city spelling check", () => {
+  const counts = new Map([
+    ["bowling green", { name: "Bowling Green", count: 14 }],
+    ["bolwing green", { name: "Bolwing Green", count: 1 }],
+    ["campbellsville", { name: "Campbellsville", count: 9 }],
+    ["campbellsvlle", { name: "Campbellsvlle", count: 1 }],
+    ["london", { name: "London", count: 5 }],
+    ["lebanon", { name: "Lebanon", count: 2 }],
+  ]);
+  it("points rare spellings at the common one, never the other way", () => {
+    expect(likelyCityTypo("Bolwing Green", counts)).toBe("Bowling Green");
+    expect(likelyCityTypo("Campbellsvlle", counts)).toBe("Campbellsville");
+    expect(likelyCityTypo("Bowling Green", counts)).toBeNull();
+    expect(likelyCityTypo("Lebanon", counts)).toBeNull(); // different towns aren't flagged
   });
 });
