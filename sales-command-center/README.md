@@ -9,7 +9,27 @@ Permissions are enforced on the server for every page, action and export; hiding
 
 ---
 
-## Quick start
+## Try it online: phone or any computer, nothing to install
+
+1. Open **https://render.com/deploy?repo=https://github.com/pneely26/CAST-ME-** and sign in to Render with GitHub. Allow Render to access this repository.
+2. Fill in the two blanks:
+   - **BOOTSTRAP_ADMIN_EMAIL**: the email you'll sign in with.
+   - **BOOTSTRAP_ADMIN_PASSWORD**: at least 10 characters.
+3. Tap **Apply**. Render creates the database, builds the app and starts it, which takes about 5–10 minutes.
+4. Open the `https://sales-command-center-….onrender.com` address Render shows and sign in.
+   - **Your login:** your email and password. You see the coordinator view.
+   - **Demo rep login:** `demo-rep@example.com` with the **same password**. Open it on your phone to see the rep's view.
+
+Demo leads, visits and sales are loaded so there's something to click; all of it is marked "Demo". To start clean, use Settings → **Remove demo data**, and deactivate the demo rep in Settings → Users.
+
+Free-plan limits:
+- The app sleeps after 15 minutes without use, so the next visit takes about a minute to wake it.
+- Render's free database expires after 30 days.
+- Uploaded files are lost when the app restarts.
+
+That's fine for trying it out. For real use, upgrade the plan or follow **Deployment** below.
+
+## Quick start (your own computer)
 
 You need **Node.js 20+** and **PostgreSQL 14+** running locally (on a Mac, [Postgres.app](https://postgresapp.com) is the easiest).
 

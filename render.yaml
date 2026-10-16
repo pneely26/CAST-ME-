@@ -1,0 +1,35 @@
+# One-click hosting for Sales Command Center on Render (https://render.com).
+# Deploy: https://render.com/deploy?repo=https://github.com/pneely26/CAST-ME-
+# You'll be asked for the email and password of your first (coordinator) login.
+services:
+  - type: web
+    name: sales-command-center
+    runtime: node
+    plan: free
+    rootDir: sales-command-center
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npx prisma migrate deploy && npx next start -p $PORT
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sales-command-center-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: APP_TIMEZONE
+        value: America/Chicago
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_DEMO
+        value: "true"
+
+databases:
+  - name: sales-command-center-db
+    plan: free
+    databaseName: sales_command_center
+    user: scc
