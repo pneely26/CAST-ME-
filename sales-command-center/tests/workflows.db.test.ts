@@ -42,8 +42,8 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
     const lead = await newLead("Visit History Cafe");
     const t1 = new Date(Date.now() - 48 * H);
     const t2 = new Date(Date.now() - 2 * H);
-    await svc.visits.recordVisit(U.rep, { leadId: lead.id, visitAt: t1, type: "WALK_IN", outcome: "LEFT_INFORMATION", feedback: "Left a brochure with the cashier" });
-    await svc.visits.recordVisit(U.rep, { leadId: lead.id, visitAt: t2, type: "WALK_IN", outcome: "INTERESTED", feedback: "Owner wants pricing", followUpAction: "Send pricing", followUpDueAt: future(24) });
+    await svc.visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: t1, type: "WALK_IN", outcome: "LEFT_INFORMATION", feedback: "Left a brochure with the cashier" });
+    await svc.visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: t2, type: "WALK_IN", outcome: "INTERESTED", feedback: "Owner wants pricing", followUpAction: "Send pricing", followUpDueAt: future(24) });
     const l = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
     expect(await prisma.visit.count({ where: { leadId: lead.id } })).toBe(2); // both preserved
     expect(l.lastVisitAt?.getTime()).toBe(t2.getTime());
@@ -54,17 +54,17 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
     expect(l.nextFollowUpAt).not.toBeNull();
     const fu = await prisma.followUp.findFirstOrThrow({ where: { leadId: lead.id } });
     expect(fu).toMatchObject({ action: "Send pricing", assignedToId: U.rep.id, status: "OPEN" });
-    // coordinator was told about the feedback
-    expect(await prisma.notification.count({ where: { userId: U.coordinator.id, type: "NEW_FEEDBACK" } })).toBe(2);
+    // the coordinator entered these visits, so nobody needs a "new feedback" alert
+    expect(await prisma.notification.count({ where: { userId: U.coordinator.id, type: "NEW_FEEDBACK" } })).toBe(0);
     // timeline has entries
     expect(await prisma.auditLog.count({ where: { leadId: lead.id, action: "visit.recorded" } })).toBe(2);
   });
 
   it("a resubmitted visit form (same client key) does not create a second visit", async () => {
     const lead = await newLead("Double Tap Deli");
-    const input = { leadId: lead.id, visitAt: new Date(), type: "WALK_IN" as const, outcome: "LEFT_INFORMATION" as const, clientKey: "key-123" };
-    const a = await svc.visits.recordVisit(U.rep, input);
-    const b = await svc.visits.recordVisit(U.rep, input);
+    const input = { leadId: lead.id, repId: U.rep.id, visitAt: new Date(), type: "WALK_IN" as const, outcome: "LEFT_INFORMATION" as const, clientKey: "key-123" };
+    const a = await svc.visits.recordVisit(U.coordinator, input);
+    const b = await svc.visits.recordVisit(U.coordinator, input);
     expect(a.id).toBe(b.id);
     expect(await prisma.visit.count({ where: { leadId: lead.id } })).toBe(1);
   });
@@ -84,7 +84,7 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
 
   it("J: Do Not Contact cancels open follow-ups, blocks new appointments, keeps history", async () => {
     const lead = await newLead("No Thanks Nails");
-    await svc.visits.recordVisit(U.rep, { leadId: lead.id, visitAt: new Date(), type: "WALK_IN", outcome: "REQUESTED_CALLBACK", followUpAction: "Call back", followUpDueAt: future(48) });
+    await svc.visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: new Date(), type: "WALK_IN", outcome: "REQUESTED_CALLBACK", followUpAction: "Call back", followUpDueAt: future(48) });
     await svc.leads.setLeadStatus(U.coordinator, lead.id, "DO_NOT_CONTACT");
     expect(await prisma.followUp.count({ where: { leadId: lead.id, status: "OPEN" } })).toBe(0);
     expect(await prisma.followUp.count({ where: { leadId: lead.id, status: "CANCELED" } })).toBe(1);
@@ -96,22 +96,31 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("DO_NOT_CONTACT");
   });
 
-  it("server-side permissions: reps can't change leads or their notes, only report through visits", async () => {
+  it("server-side permissions: reps are view-only — they can see their leads but change nothing", async () => {
     const mine = await newLead("Rep One Shop", U.rep.id);
     const theirs = await newLead("Rep Two Shop", U.rep2.id);
-    await expect(svc.visits.recordVisit(U.rep, { leadId: theirs.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(/isn't assigned to you/);
+    const V = /view-only/;
+    await expect(svc.visits.recordVisit(U.rep, { leadId: mine.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(V);
+    await expect(svc.visits.recordVisit(U.rep, { leadId: theirs.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(V);
     await expect(svc.leads.updateLead(U.rep, mine.id, { businessName: "Renamed" })).rejects.toThrow(/Only the coordinator can change lead details/);
-    await expect(svc.leads.updateLead(U.rep, mine.id, { phone: "773-555-0142" })).rejects.toThrow(/Only the coordinator/);
     await expect(svc.leads.updateLead(U.rep, mine.id, { notes: "rep note" })).rejects.toThrow(/Only the coordinator/);
     await expect(svc.leads.setLeadStatus(U.rep, mine.id, "INTERESTED")).rejects.toThrow(/Only the coordinator/);
     await expect(svc.leads.archiveLeads(U.rep, [mine.id], true)).rejects.toThrow(/coordinator/);
     await expect(svc.leads.assignLeads(U.rep, [mine.id], U.rep.id)).rejects.toThrow(/coordinator/);
     await expect(svc.leads.createLead(U.rep, { businessName: "Sneaky" })).rejects.toThrow(/coordinator/);
-    await expect(svc.appts.setAppointmentStatus(U.rep, (await svc.appts.createAppointment(U.rep, { leadId: mine.id, startAt: future(200), endAt: future(201) })).id, "CANCELED", "nah")).rejects.toThrow(/can't cancel/);
+    await expect(svc.appts.createAppointment(U.rep, { leadId: mine.id, startAt: future(200), endAt: future(201) })).rejects.toThrow(V);
+    const appt = await svc.appts.createAppointment(U.coordinator, { leadId: mine.id, startAt: future(300), endAt: future(301) });
+    await expect(svc.appts.setAppointmentStatus(U.rep, appt.id, "CANCELED", "nah")).rejects.toThrow(V);
+    await expect(svc.appts.updateAppointmentDetails(U.rep, appt.id, { title: "x" })).rejects.toThrow(V);
+    await expect(svc.fu.createFollowUp(U.rep, { leadId: mine.id, dueAt: future(24), action: "Call" })).rejects.toThrow(V);
+    const fu = await svc.fu.createFollowUp(U.coordinator, { leadId: mine.id, dueAt: future(24), action: "Call" });
+    await expect(svc.fu.setFollowUpStatus(U.rep, fu.id, "DONE")).rejects.toThrow(V);
+    await expect(svc.fu.rescheduleFollowUp(U.rep, fu.id, future(48))).rejects.toThrow(V);
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: mine.id } })).notes).toBeNull();
-    // a rep's visit can't pick its own lead status — the automatic rule applies
-    await svc.visits.recordVisit(U.rep, { leadId: mine.id, visitAt: new Date(Date.now() - 60_000), type: "WALK_IN", outcome: "LEFT_INFORMATION", newStatus: "WON" });
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: mine.id } })).status).not.toBe("WON");
+    expect(await prisma.visit.count({ where: { leadId: mine.id } })).toBe(0);
+    // ...but they can still read what's theirs
+    const visible = await svc.leads.getLeadForActor(U.rep, mine.id);
+    expect(visible.id).toBe(mine.id);
   });
 
   it("concurrent edits: a stale version is rejected instead of overwriting", async () => {
@@ -122,11 +131,11 @@ describe.skipIf(!TEST_URL)("connected workflows (database)", () => {
 
   it("archiving keeps history and restoring brings it back", async () => {
     const lead = await newLead("Archive Me Inc");
-    await svc.visits.recordVisit(U.rep, { leadId: lead.id, visitAt: new Date(), type: "WALK_IN", outcome: "LEFT_INFORMATION" });
+    await svc.visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: new Date(), type: "WALK_IN", outcome: "LEFT_INFORMATION" });
     await svc.leads.archiveLeads(U.coordinator, [lead.id], true);
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).archivedAt).not.toBeNull();
     expect(await prisma.visit.count({ where: { leadId: lead.id } })).toBe(1);
-    await expect(svc.visits.recordVisit(U.rep, { leadId: lead.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(/not found/);
+    await expect(svc.visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: new Date(), type: "WALK_IN", outcome: "OTHER" })).rejects.toThrow(/not found/);
     await svc.leads.archiveLeads(U.coordinator, [lead.id], false);
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).archivedAt).toBeNull();
   });

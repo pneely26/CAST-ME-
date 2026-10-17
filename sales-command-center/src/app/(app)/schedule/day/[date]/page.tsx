@@ -13,6 +13,7 @@ import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { addStopsAction, resetDayAction, saveDayAction, stopAction, dayStatusAction } from "@/app/actions/schedule";
 import { ACTIVE_APPOINTMENT_STATUSES, DAY_PLAN_STATUS_LABEL } from "@/lib/labels";
 import { addDays, dateKeyInTz, dayRangeUtc, fmtDate, fmtDateKey, fmtTime, isDateKey, apptTime } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Day plan" };
 
@@ -107,7 +108,7 @@ export default async function DayPage({ params, searchParams }: { params: Promis
                     </div>
                     <div className="flex flex-wrap items-center gap-1">
                       <Badge tone={s.status === "VISITED" ? "good" : s.status === "SKIPPED" ? "muted" : "info"}>{s.status === "VISITED" ? "Visited" : s.status === "SKIPPED" ? "Skipped" : "Planned"}</Badge>
-                      {s.status === "PLANNED" && <Link href={`/leads/${s.lead.id}/visit?returnTo=${encodeURIComponent(`/schedule/day/${date}${rq ? `?${rq}` : ""}`)}`} className="btn-primary btn-sm">Record visit</Link>}
+                      {s.status === "PLANNED" && <WriteOnly><Link href={`/leads/${s.lead.id}/visit?returnTo=${encodeURIComponent(`/schedule/day/${date}${rq ? `?${rq}` : ""}`)}`} className="btn-primary btn-sm">Record visit</Link></WriteOnly>}
                       {["up", "down"].map((op) => (
                         <ActionForm key={op} action={stopAction}><input type="hidden" name="id" value={s.id} /><input type="hidden" name="op" value={op} /><SubmitButton className="btn-ghost btn-sm">{op === "up" ? "↑" : "↓"}</SubmitButton></ActionForm>
                       ))}
@@ -121,7 +122,7 @@ export default async function DayPage({ params, searchParams }: { params: Promis
             )}
           </Section>
 
-          <Section title="Appointments this day" action={<Link href={`/appointments/new?date=${date}${rq ? `&${rq}` : ""}`} className="link text-xs">Book</Link>}>
+          <Section title="Appointments this day" action={<WriteOnly><Link href={`/appointments/new?date=${date}${rq ? `&${rq}` : ""}`} className="link text-xs">Book</Link></WriteOnly>}>
             {appointments.length === 0 ? <Empty>None.</Empty> : (
               <ul className="divide-y divide-line-2">
                 {appointments.map((a) => (

@@ -32,7 +32,6 @@ export async function loadDemoData(actor: Actor) {
   if ((await demoStatus()).present) throw invalid("Demo data is already loaded. Remove it first to load a fresh copy.");
   const rep = await prisma.user.findFirst({ where: { role: "REP", active: true }, orderBy: { createdAt: "asc" } });
   if (!rep) throw invalid("Add a sales rep first — demo leads are assigned to a rep.");
-  const repActor = { id: rep.id, role: rep.role, name: rep.name };
 
   const territory = await prisma.territory.create({ data: { name: DEMO_TERRITORY, color: "#9333ea", notes: "Demonstration data — safe to remove in Settings.", isDemo: true } });
   const [north, south] = await Promise.all([
@@ -53,10 +52,10 @@ export async function loadDemoData(actor: Actor) {
   const [coffee, hardware, dental, bakery, auto] = leads;
   const now = Date.now();
 
-  await recordVisit(repActor, { leadId: coffee.id, visitAt: new Date(now - 6 * D), type: "WALK_IN", outcome: "INTERESTED", contactEncountered: "Sam Lee", feedback: "Demo: owner liked the brochure and wants pricing.", interestLevel: "HIGH", followUpAction: "Send pricing sheet", followUpDueAt: new Date(now - 1 * D) });
-  await recordVisit(repActor, { leadId: hardware.id, visitAt: new Date(now - 3 * D), type: "WALK_IN", outcome: "DECISION_MAKER_UNAVAILABLE", feedback: "Demo: decision maker out until next week.", followUpAction: "Stop by again", followUpDueAt: new Date(now + 2 * D) });
-  await recordVisit(repActor, { leadId: dental.id, visitAt: new Date(now - 40 * D), type: "WALK_IN", outcome: "LEFT_INFORMATION", feedback: "Demo: left information with the front desk." });
-  await recordVisit(repActor, { leadId: auto.id, visitAt: new Date(now - 10 * D), type: "SCHEDULED_APPOINTMENT", outcome: "SALE_COMPLETED", contactEncountered: "Pat Morgan", feedback: "Demo: signed up on the spot." });
+  await recordVisit(actor, { leadId: coffee.id, repId: rep.id, visitAt: new Date(now - 6 * D), type: "WALK_IN", outcome: "INTERESTED", contactEncountered: "Sam Lee", feedback: "Demo: owner liked the brochure and wants pricing.", interestLevel: "HIGH", followUpAction: "Send pricing sheet", followUpDueAt: new Date(now - 1 * D) });
+  await recordVisit(actor, { leadId: hardware.id, repId: rep.id, visitAt: new Date(now - 3 * D), type: "WALK_IN", outcome: "DECISION_MAKER_UNAVAILABLE", feedback: "Demo: decision maker out until next week.", followUpAction: "Stop by again", followUpDueAt: new Date(now + 2 * D) });
+  await recordVisit(actor, { leadId: dental.id, repId: rep.id, visitAt: new Date(now - 40 * D), type: "WALK_IN", outcome: "LEFT_INFORMATION", feedback: "Demo: left information with the front desk." });
+  await recordVisit(actor, { leadId: auto.id, repId: rep.id, visitAt: new Date(now - 10 * D), type: "SCHEDULED_APPOINTMENT", outcome: "SALE_COMPLETED", contactEncountered: "Pat Morgan", feedback: "Demo: signed up on the spot." });
   await createFollowUp(actor, { leadId: bakery.id, dueAt: new Date(now + 4 * H), action: "Call to find the owner's name" });
   const start = new Date(Math.ceil((now + 2 * D) / H) * H);
   await createAppointment(actor, { leadId: coffee.id, repId: rep.id, startAt: start, endAt: new Date(start.getTime() + 45 * 60_000), title: "Pricing review (demo)", allowOverlap: true });

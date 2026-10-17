@@ -10,6 +10,7 @@ import { RangePicker } from "@/components/RangePicker";
 import { summarizeSales } from "@/lib/domain/sales";
 import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, PAYMENT_STATUS_LABEL, money, pct } from "@/lib/labels";
 import { fmtDate, resolveRange, fmtDateKey } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Sales" };
 
@@ -60,7 +61,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-4">
-      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<>{isCoord && <a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a>}<Link className="btn-primary" href="/sales/new">Record sale</Link></>} />
+      <PageHeader title={isCoord ? "Sales & Opportunities" : "My Sales"} subtitle={`Closed sales and revenue: deals closed won in ${range.label.toLowerCase()}. Pipeline: open opportunities' estimated value (not revenue).`} actions={<>{isCoord && <a className="btn-secondary" href={`/api/export/sales?${qs}`}>Export CSV</a>}<WriteOnly><Link className="btn-primary" href="/sales/new">Record sale</Link></WriteOnly></>} />
       <Flash message={sp(params, "msg")} />
       <RangePicker range={range} basePath="/sales" extra={keep} allowAll />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -84,7 +85,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
           <button className="btn-secondary btn-sm">Filter</button>
         </form>
       </div>
-      {rows.length === 0 ? <div className="card"><Empty action={<Link href="/sales/new" className="btn-secondary">Record sale</Link>}>No opportunities in this view.</Empty></div> : (
+      {rows.length === 0 ? <div className="card"><Empty action={<WriteOnly><Link href="/sales/new" className="btn-secondary">Record sale</Link></WriteOnly>}>No opportunities in this view.</Empty></div> : (
         <>
           {open.length > 0 && view !== "closed" && <div><h2 className="mb-2 text-sm font-semibold">Open opportunities <Badge tone="accent">{open.length}</Badge></h2><Table items={open} /></div>}
           {closed.length > 0 && view !== "open" && <div><h2 className="mb-2 text-sm font-semibold">Completed (won & lost) <Badge tone="good">{closed.length}</Badge></h2><Table items={closed} /></div>}

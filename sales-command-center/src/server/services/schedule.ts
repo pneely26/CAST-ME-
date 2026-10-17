@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { DayPlanStatus } from "@prisma/client";
 import { prisma, type Tx } from "../db";
 import { audit } from "../audit";
-import { assertLeadAccess, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertLeadAccess, isCoordinator, type Actor } from "../policy";
 import { forbidden, invalid, notFound } from "../errors";
 import { refreshLeadRollups } from "./rollups";
 import { notify } from "./notifications";
@@ -47,6 +47,7 @@ export async function getActiveTemplate(tx: Tx, repId: string) {
 
 /** Save the recurring weekly territory plan. Saved day plans (overrides) are not touched. */
 export async function saveTemplate(actor: Actor, repId: string | null, days: (DayFields & { weekday: number })[], name = "Weekly territory plan") {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
     let t = await getActiveTemplate(tx, rep.id);
@@ -107,6 +108,7 @@ async function ensurePlan(tx: Tx, repId: string, date: string) {
 
 /** Edit one date. If it no longer matches the template it is an override; future weeks are unaffected. */
 export async function saveDayPlan(actor: Actor, repId: string | null, date: string, raw: DayFields & { status?: DayPlanStatus }) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
     const d = await normalizeArea(tx, dayFields.parse(raw));
@@ -125,6 +127,7 @@ export async function saveDayPlan(actor: Actor, repId: string | null, date: stri
 }
 
 export async function setDayStatus(actor: Actor, repId: string | null, date: string, status: DayPlanStatus) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
     const plan = await ensurePlan(tx, rep.id, date);
@@ -135,6 +138,7 @@ export async function setDayStatus(actor: Actor, repId: string | null, date: str
 
 /** Go back to the recurring plan for this date (stops are kept). */
 export async function resetDayToTemplate(actor: Actor, repId: string | null, date: string) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
     const plan = await tx.dayPlan.findUnique({ where: { repId_date: { repId: rep.id, date } } });
@@ -148,6 +152,7 @@ export async function resetDayToTemplate(actor: Actor, repId: string | null, dat
 
 /** Coordinator assigns leads to a day; a rep may add their own assigned leads to their own day. */
 export async function addStops(actor: Actor, repId: string | null, date: string, leadIds: string[]) {
+  assertWriter(actor);
   if (!leadIds.length) throw invalid("Choose at least one lead.");
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
@@ -176,6 +181,7 @@ export async function addStops(actor: Actor, repId: string | null, date: string,
 }
 
 export async function updateStop(actor: Actor, stopId: string, change: { status?: "PLANNED" | "SKIPPED"; move?: -1 | 1; remove?: boolean; note?: string | null }) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const stop = await tx.dayPlanStop.findUnique({ where: { id: stopId }, include: { dayPlan: true, lead: true } });
     if (!stop) throw notFound("Planned visit");
@@ -204,6 +210,7 @@ export async function updateStop(actor: Actor, stopId: string, change: { status?
 
 /** Copy one week's day plans (territory, hours, targets, optionally planned leads) to another week. */
 export async function copyWeek(actor: Actor, repId: string | null, fromStart: string, toStart: string, withStops: boolean) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const rep = await resolveRep(tx, actor, repId);
     let copied = 0;
@@ -231,6 +238,7 @@ export async function copyWeek(actor: Actor, repId: string | null, fromStart: st
 
 /** Save a week's actual day plans as the new recurring template. */
 export async function weekToTemplate(actor: Actor, repId: string | null, weekStart: string) {
+  assertWriter(actor);
   const rep = await prisma.$transaction((tx) => resolveRep(tx, actor, repId));
   const days = await getSchedule(actor, rep.id, weekStart, 7);
   return saveTemplate(

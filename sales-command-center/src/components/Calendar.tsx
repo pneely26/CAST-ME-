@@ -89,9 +89,9 @@ export function Calendar({ timeZone, role, repId, initialDate, initialView = "ti
         slotMaxTime="20:00:00"
         nowIndicator
         allDayText="All day"
-        editable
-        eventDurationEditable
-        selectable
+        editable={role === "COORDINATOR"}
+        eventDurationEditable={role === "COORDINATOR"}
+        selectable={role === "COORDINATOR"}
         selectMirror
         dayMaxEvents={4}
         events={{ url: `/api/calendar?rep=${repId ?? "all"}${showCanceled ? "&canceled=1" : ""}` }}

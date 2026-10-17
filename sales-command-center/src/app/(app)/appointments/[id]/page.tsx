@@ -10,6 +10,7 @@ import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { appointmentDetailsAction, appointmentStatusAction, cancelRescheduleAction, moveAppointmentAction, requestRescheduleAction } from "@/app/actions/appointments";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/labels";
 import { dateKeyInTz, fmtDateTime, fmtTime, timeInTz, apptRange } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Appointment" };
 
@@ -53,7 +54,7 @@ export default async function AppointmentPage({ params, searchParams }: { params
         actions={
           <>
             <Link href={`/leads/${a.leadId}`} className="btn-secondary">Open lead</Link>
-            {active && <Link href={`/leads/${a.leadId}/visit?appointment=${a.id}&returnTo=${encodeURIComponent(`/appointments/${a.id}`)}`} className="btn-primary">Record visit</Link>}
+            {active && <WriteOnly><Link href={`/leads/${a.leadId}/visit?appointment=${a.id}&returnTo=${encodeURIComponent(`/appointments/${a.id}`)}`} className="btn-primary">Record visit</Link></WriteOnly>}
           </>
         }
       />

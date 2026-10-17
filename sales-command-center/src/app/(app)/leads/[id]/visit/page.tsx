@@ -2,9 +2,9 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/server/auth";
 import { prisma } from "@/server/db";
 import { getSettings } from "@/server/settings";
-import { assertLeadAccess, isCoordinator } from "@/server/policy";
+import { assertLeadAccess, isCoordinator, can, VIEW_ONLY_MESSAGE } from "@/server/policy";
 import { repOptions } from "@/server/options";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Empty } from "@/components/ui";
 import { LeadStatusBadge } from "@/components/badges";
 import { VisitForm } from "./VisitForm";
 import { formatPhone } from "@/lib/normalize";
@@ -16,6 +16,7 @@ export default async function RecordVisitPage({ params, searchParams }: { params
   const { id } = await params;
   const sp = await searchParams;
   const actor = await requireActor();
+  if (!can(actor, "data.write")) return <div className="card"><Empty>{VIEW_ONLY_MESSAGE}</Empty></div>;
   const lead = await prisma.lead.findUnique({ where: { id } });
   if (!lead || lead.archivedAt) notFound();
   try {

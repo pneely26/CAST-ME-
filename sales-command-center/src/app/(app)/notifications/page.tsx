@@ -46,7 +46,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         subtitle={`In-app notifications${external.length ? ` (also sent by ${external.join(", ")})` : ". Email, text and push notifications aren't set up, so nothing is sent outside the app"}.`}
         actions={
           unread > 0 ? (
-            <ActionForm action={markReadAction} showSuccess={false}>
+            <ActionForm allowReadOnly action={markReadAction} showSuccess={false}>
               <input type="hidden" name="all" value="1" />
               <SubmitButton className="btn-secondary">Mark all read</SubmitButton>
             </ActionForm>
@@ -68,7 +68,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
                 {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
                 <p className="mt-0.5 text-xs text-muted" title={fmtDateTime(n.createdAt, tz)}>{relativeDay(n.createdAt, tz)} · {fmtDateTime(n.createdAt, tz)}</p>
               </div>
-              <ActionForm action={markReadAction} showSuccess={false}>
+              <ActionForm allowReadOnly action={markReadAction} showSuccess={false}>
                 <input type="hidden" name="ids" value={n.id} />
                 {n.readAt && <input type="hidden" name="unread" value="1" />}
                 <SubmitButton className="btn-ghost btn-sm">{n.readAt ? "Mark unread" : "Mark read"}</SubmitButton>

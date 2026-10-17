@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AppointmentKind, AppointmentStatus } from "@prisma/client";
 import { prisma, type Tx } from "../db";
 import { audit } from "../audit";
-import { assertCan, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertCan, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
 import { conflict, invalid, notFound, forbidden } from "../errors";
 import { refreshLeadRollups } from "./rollups";
 import { notify, notifyCoordinators } from "./notifications";
@@ -27,6 +27,7 @@ export const appointmentSchema = z.object({
 });
 
 export async function createAppointmentInTx(tx: Tx, actor: Actor, raw: z.input<typeof appointmentSchema>) {
+  assertWriter(actor);
   const d = appointmentSchema.parse(raw);
   const err = validateTimes(d.startAt, d.endAt);
   if (err) throw invalid(err);
@@ -121,6 +122,7 @@ export async function moveAppointment(actor: Actor, id: string, startAt: Date, e
 
 /** Status changes: cancel (with reason), confirm, complete, no-show, restore. Records are never deleted. */
 export async function setAppointmentStatus(actor: Actor, id: string, status: AppointmentStatus, reason: string | null) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.findUnique({ where: { id }, include: { lead: true } });
     if (!appt) throw notFound("Appointment");
@@ -151,6 +153,7 @@ export async function setAppointmentStatus(actor: Actor, id: string, status: App
 }
 
 export async function updateAppointmentDetails(actor: Actor, id: string, data: { title?: string | null; location?: string | null; notes?: string | null; kind?: AppointmentKind }) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.findUnique({ where: { id }, include: { lead: true } });
     if (!appt) throw notFound("Appointment");

@@ -3,10 +3,7 @@
 A shared workspace for a **coordinator** and their **sales rep(s)**: leads, territories, weekly route plans, appointments and reschedules, visit feedback, follow-ups, sales, reports, notifications, and lead import from screenshots or CSV files. Everything lives in one database, so a visit recorded on a phone shows up on the coordinator's dashboard, the lead's history, the calendar and the reports at the same time.
 
 - **Coordinator:** sees everything and manages leads, territories, schedules, users and settings. Approves reschedules.
-- **Sales rep:** sees only their own leads, schedule, visits and sales. A rep:
-  - **records visits and feedback** from the phone, and *requests* schedule changes.
-  - **can't change lead details or notes** (contact info, status and so on), and can't pick a lead's status on a visit; the automatic rule sets it.
-  - **can't export anything.**
+- **Sales rep (view-only):** sees only their own leads, appointments, schedule, past visits, sales and history. A rep can't change anything: no recording visits or sales, no booking, rescheduling or follow-ups, no lead edits and no exports. A rep can still read their notifications and change their own password.
 
 Permissions are enforced on the server for every page, action and export; hiding a button is never the only protection.
 

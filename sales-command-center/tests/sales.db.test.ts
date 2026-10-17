@@ -24,23 +24,23 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
 
   it("closing as won requires confirmation and a final amount", async () => {
     const lead = await newLead("Confirm Diner");
-    await expect(opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "POS system", status: "WON", finalAmount: 1200 })).rejects.toThrow(/Confirm/);
-    await expect(opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "POS system", status: "WON", confirmed: true })).rejects.toThrow(/final sale amount/);
+    await expect(opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "POS system", status: "WON", finalAmount: 1200 })).rejects.toThrow(/Confirm/);
+    await expect(opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "POS system", status: "WON", confirmed: true })).rejects.toThrow(/final sale amount/);
     expect(await prisma.opportunity.count({ where: { leadId: lead.id } })).toBe(0);
   });
 
   it("a won sale marks the lead Won, notifies the coordinator, and counts once in revenue", async () => {
     const lead = await newLead("Won Pizza");
-    const open = await opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Signage", estimatedValue: 5000 });
+    const open = await opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "Signage", estimatedValue: 5000 });
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("OPPORTUNITY_IN_PROGRESS");
-    const won = await opps.saveOpportunity(U.rep, open.id, { leadId: lead.id, product: "Signage", status: "WON", estimatedValue: 5000, finalAmount: 4200, commissionRatePct: 10, confirmed: true }, open.version);
+    const won = await opps.saveOpportunity(U.coordinator, open.id, { leadId: lead.id, product: "Signage", status: "WON", estimatedValue: 5000, finalAmount: 4200, commissionRatePct: 10, confirmed: true }, open.version);
     expect(won.closedAt).not.toBeNull();
     expect(Number(won.commissionAmount)).toBe(420);
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("WON");
-    expect(await prisma.notification.count({ where: { userId: U.coordinator.id, type: "NEW_SALE" } })).toBe(1);
+    expect(await prisma.notification.count({ where: { userId: U.rep.id, type: "NEW_SALE" } })).toBe(1);
     // saving again (no change) must not double count or re-notify
-    await opps.saveOpportunity(U.rep, won.id, { leadId: lead.id, product: "Signage", status: "WON", finalAmount: 4200, commissionRatePct: 10 }, won.version);
-    expect(await prisma.notification.count({ where: { userId: U.coordinator.id, type: "NEW_SALE" } })).toBe(1);
+    await opps.saveOpportunity(U.coordinator, won.id, { leadId: lead.id, product: "Signage", status: "WON", finalAmount: 4200, commissionRatePct: 10 }, won.version);
+    expect(await prisma.notification.count({ where: { userId: U.rep.id, type: "NEW_SALE" } })).toBe(1);
     const r = await reports.salesReport(U.coordinator, {}, all);
     expect(r.summary.wonCount).toBe(1);
     expect(r.summary.revenue).toBe(4200);
@@ -73,7 +73,7 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
 
   it("reps can't see or edit another rep's opportunities", async () => {
     const lead = await newLead("Other Rep Cafe", U.rep2.id);
-    const o = await opps.saveOpportunity(U.rep2, null, { leadId: lead.id, product: "Loyalty app", estimatedValue: 100 });
+    const o = await opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "Loyalty app", estimatedValue: 100 });
     const visible = await q.listOpportunities(U.rep, {}, all);
     expect(visible.map((x) => x.id)).not.toContain(o.id);
     await expect(opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Hijack" }, o.version)).rejects.toThrow();
@@ -91,12 +91,13 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
     expect((await reports.salesReport(U.coordinator, {}, all)).summary.revenue).toBe(before);
   });
 
-  it("sale tracking: Signed 44, run date and GO status are saved, editable by the rep, and audited", async () => {
+  it("sale tracking: Signed 44, run date and GO status are saved, saved by the coordinator (reps are view-only), and audited", async () => {
     const lead = await newLead("Tracking Fields Diner");
-    await expect(opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", runDate: "next week" })).rejects.toThrow(/Run date/);
-    const o = await opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, confirmed: true, signed44: true, runDate: "2026-11-03", goStatus: "GO — waiting on install crew" });
+    await expect(opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", signed44: true })).rejects.toThrow(/view-only/);
+    await expect(opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "Package", runDate: "next week" })).rejects.toThrow(/Run date/);
+    const o = await opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, confirmed: true, signed44: true, runDate: "2026-11-03", goStatus: "GO — waiting on install crew" });
     expect(o).toMatchObject({ signed44: true, runDate: "2026-11-03", goStatus: "GO — waiting on install crew" });
-    const o2 = await opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, signed44: true, runDate: "2026-11-10", goStatus: "GO" }, o.version);
+    const o2 = await opps.saveOpportunity(U.coordinator, o.id, { leadId: lead.id, product: "Package", status: "WON", finalAmount: 500, signed44: true, runDate: "2026-11-10", goStatus: "GO" }, o.version);
     expect(o2.runDate).toBe("2026-11-10");
     const log = await prisma.auditLog.findFirstOrThrow({ where: { entityId: o.id, action: "opportunity.updated" } });
     expect(log.summary).toMatch(/runDate/);
@@ -104,10 +105,10 @@ describe.skipIf(!TEST_URL)("sales (database)", () => {
 
   it("called to desk: tentative run date is kept only while the deal is called to the desk", async () => {
     const lead = await newLead("Desk Call Bakery");
-    const o = await opps.saveOpportunity(U.rep, null, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "2026-12-01" });
+    const o = await opps.saveOpportunity(U.coordinator, null, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "2026-12-01" });
     expect(o).toMatchObject({ calledToDesk: true, tentativeRunDate: "2026-12-01" });
-    await expect(opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "Dec 1" }, o.version)).rejects.toThrow(/Tentative run date/);
-    const off = await opps.saveOpportunity(U.rep, o.id, { leadId: lead.id, product: "Package", calledToDesk: false, tentativeRunDate: "2026-12-01" }, o.version);
+    await expect(opps.saveOpportunity(U.coordinator, o.id, { leadId: lead.id, product: "Package", calledToDesk: true, tentativeRunDate: "Dec 1" }, o.version)).rejects.toThrow(/Tentative run date/);
+    const off = await opps.saveOpportunity(U.coordinator, o.id, { leadId: lead.id, product: "Package", calledToDesk: false, tentativeRunDate: "2026-12-01" }, o.version);
     expect(off).toMatchObject({ calledToDesk: false, tentativeRunDate: null });
   });
 });

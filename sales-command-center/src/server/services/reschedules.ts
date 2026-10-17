@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "../db";
 import { audit } from "../audit";
-import { assertCan, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertCan, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
 import { conflict, invalid, notFound } from "../errors";
 import { moveAppointmentInTx } from "./appointments";
 import { notify, notifyCoordinators } from "./notifications";
@@ -19,6 +19,7 @@ const requestSchema = z.object({
 
 /** A rep (or coordinator) asks to move an appointment. The original stays booked until approved. */
 export async function requestReschedule(actor: Actor, raw: z.input<typeof requestSchema>) {
+  assertWriter(actor);
   const d = requestSchema.parse(raw);
   const err = validateTimes(d.requestedStart, d.requestedEnd);
   if (err) throw invalid(err);
@@ -71,6 +72,7 @@ export async function resolveReschedule(actor: Actor, id: string, decision: "app
 }
 
 export async function cancelRescheduleRequest(actor: Actor, id: string) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const req = await tx.rescheduleRequest.findUnique({ where: { id } });
     if (!req) throw notFound("Reschedule request");
