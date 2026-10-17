@@ -14,6 +14,7 @@ import { createFollowUpAction, followUpStatusAction } from "@/app/actions/follow
 import { CLOSED_STATUSES, INTEREST_LABEL, LEAD_STATUSES, LEAD_STATUS_LABEL, VISIT_TYPE_LABEL, money } from "@/lib/labels";
 import { formatPhone } from "@/lib/normalize";
 import { addDays, dateKeyInTz, fmtDate, fmtDateTime, fmtTime, relativeDay, apptRange, apptDateTime, visitDateTime, fmtDateKey } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -91,9 +92,9 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
         }
         actions={
           <>
-            {!lead.archivedAt && <Link href={`/leads/${lead.id}/visit`} className="btn-primary">Record visit</Link>}
-            {!lead.archivedAt && lead.status !== "DO_NOT_CONTACT" && <Link href={`/appointments/new?lead=${lead.id}`} className="btn-secondary">Schedule appointment</Link>}
-            {!lead.archivedAt && <Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">Record sale</Link>}
+            {!lead.archivedAt && <WriteOnly><Link href={`/leads/${lead.id}/visit`} className="btn-primary">Record visit</Link></WriteOnly>}
+            {!lead.archivedAt && lead.status !== "DO_NOT_CONTACT" && <WriteOnly><Link href={`/appointments/new?lead=${lead.id}`} className="btn-secondary">Schedule appointment</Link></WriteOnly>}
+            {!lead.archivedAt && <WriteOnly><Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">Record sale</Link></WriteOnly>}
             {isCoord && <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>}
           </>
         }
@@ -117,7 +118,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       {tab === "overview" && (
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
-            <Section title="Sale" subtitle="Signed 44, run date, GO status and desk calls for this lead's sales" action={!lead.archivedAt ? <Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link> : undefined}>
+            <Section title="Sale" subtitle="Signed 44, run date, GO status and desk calls for this lead's sales" action={!lead.archivedAt ? <WriteOnly><Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link></WriteOnly> : undefined}>
               {lead.opportunities.length === 0 ? (
                 <Empty>No sale recorded yet. Tap “Record sale” to add one with Signed 44, run date, GO status and desk call.</Empty>
               ) : (
@@ -128,7 +129,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                         <Link className="font-medium hover:underline" href={`/sales/${o.id}`}>{o.product}</Link>
                         <OppStatusBadge s={o.status} />
                         {o.status === "WON" && <span className="text-sm text-muted">{money(o.finalAmount ? Number(o.finalAmount) : null)}</span>}
-                        <Link className="link ml-auto text-xs" href={`/sales/${o.id}?edit=1`}>Edit sale</Link>
+                        <WriteOnly><Link className="link ml-auto text-xs" href={`/sales/${o.id}?edit=1`}>Edit sale</Link></WriteOnly>
                       </div>
                       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <KV label="Signed 44">{o.signed44 ? <Badge tone="good">Yes</Badge> : "No"}</KV>
@@ -283,7 +284,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "visits" && (
-        <Section title="Visit history" subtitle="Every visit is kept permanently — newer visits never overwrite older ones." action={!lead.archivedAt ? <Link href={`/leads/${lead.id}/visit`} className="btn-primary btn-sm">Record visit</Link> : undefined}>
+        <Section title="Visit history" subtitle="Every visit is kept permanently — newer visits never overwrite older ones." action={!lead.archivedAt ? <WriteOnly><Link href={`/leads/${lead.id}/visit`} className="btn-primary btn-sm">Record visit</Link></WriteOnly> : undefined}>
           {lead.visits.length === 0 ? <Empty>No visits recorded yet.</Empty> : (
             <ol className="divide-y divide-line-2">
               {lead.visits.map((v) => (
@@ -334,7 +335,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "appointments" && (
-        <Section title="Appointments" subtitle="Including canceled and rescheduled ones — nothing is deleted." action={lead.status !== "DO_NOT_CONTACT" && !lead.archivedAt ? <Link href={`/appointments/new?lead=${lead.id}`} className="btn-primary btn-sm">Schedule</Link> : undefined}>
+        <Section title="Appointments" subtitle="Including canceled and rescheduled ones — nothing is deleted." action={lead.status !== "DO_NOT_CONTACT" && !lead.archivedAt ? <WriteOnly><Link href={`/appointments/new?lead=${lead.id}`} className="btn-primary btn-sm">Schedule</Link></WriteOnly> : undefined}>
           {lead.appointments.length === 0 ? <Empty>No appointments.</Empty> : (
             <ul className="divide-y divide-line-2">
               {lead.appointments.map((a) => {
@@ -363,7 +364,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "sales" && (
-        <Section title="Opportunities & sales" action={!lead.archivedAt ? <Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link> : undefined}>
+        <Section title="Opportunities & sales" action={!lead.archivedAt ? <WriteOnly><Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link></WriteOnly> : undefined}>
           {lead.opportunities.length === 0 ? <Empty>No opportunities yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="tbl">

@@ -11,6 +11,7 @@ import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { stopAction } from "@/app/actions/schedule";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/labels";
 import { dateKeyInTz, dayRangeUtc, fmtClock, fmtDate, fmtDateKey, fmtTime, apptTime } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Today's route" };
 
@@ -38,7 +39,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       <Flash message={sp(params, "msg")} />
       <div className="card flex items-center justify-between px-4 py-3">
         <div><div className="text-2xl font-semibold tabular-nums">{done}<span className="text-base font-normal text-muted"> / {day.stops.length}{day.visitTarget ? ` (target ${day.visitTarget})` : ""}</span></div><div className="text-xs text-muted">visits done</div></div>
-        <Link href={`/schedule/day/${today}`} className="btn-secondary btn-sm">Edit plan</Link>
+        <WriteOnly><Link href={`/schedule/day/${today}`} className="btn-secondary btn-sm">Edit plan</Link></WriteOnly>
       </div>
       {day.notes && <p className="rounded-md bg-white px-3 py-2 text-sm ring-1 ring-line">{day.notes}</p>}
 
@@ -55,7 +56,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {a.lead.phone ? <a className="btn-secondary" href={`tel:${a.lead.phone.replace(/[^\d+]/g, "")}`}>Call</a> : <span />}
                   {a.lead.address ? <a className="btn-secondary" href={mapLink(a.lead)} target="_blank" rel="noopener noreferrer">Map</a> : <span />}
-                  {ACTIVE_APPOINTMENT_STATUSES.includes(a.status) ? <Link className="btn-primary" href={`/leads/${a.leadId}/visit?appointment=${a.id}&returnTo=${ret}`}>Visit</Link> : <Link className="btn-ghost" href={`/appointments/${a.id}`}>Details</Link>}
+                  {ACTIVE_APPOINTMENT_STATUSES.includes(a.status) ? <WriteOnly><Link className="btn-primary" href={`/leads/${a.leadId}/visit?appointment=${a.id}&returnTo=${ret}`}>Visit</Link></WriteOnly> : <Link className="btn-ghost" href={`/appointments/${a.id}`}>Details</Link>}
                 </div>
               </li>
             ))}
@@ -82,7 +83,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
                     {s.lead.phone ? <a className="btn-secondary" href={`tel:${s.lead.phone.replace(/[^\d+]/g, "")}`}>Call</a> : <span />}
                     {s.lead.address ? <a className="btn-secondary" href={mapLink(s.lead)} target="_blank" rel="noopener noreferrer">Map</a> : <span />}
                     <ActionForm action={stopAction} confirm="Skip this business today?"><input type="hidden" name="id" value={s.id} /><input type="hidden" name="op" value="skip" /><SubmitButton className="btn-ghost w-full">Skip</SubmitButton></ActionForm>
-                    <Link className="btn-primary" href={`/leads/${s.lead.id}/visit?returnTo=${ret}`}>Visit</Link>
+                    <WriteOnly><Link className="btn-primary" href={`/leads/${s.lead.id}/visit?returnTo=${ret}`}>Visit</Link></WriteOnly>
                   </div>
                 )}
               </li>

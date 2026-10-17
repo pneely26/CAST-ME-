@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
+import { useReadOnly } from "./ReadOnly";
 
 type Result = { ok: true; message?: string; redirect?: string; data?: unknown } | { ok: false; error: string; code?: string; details?: Record<string, unknown> };
 type Action = (prev: Result | null, fd: FormData) => Promise<Result>;
@@ -20,6 +21,7 @@ export function ActionForm({
   resetOnSuccess,
   showSuccess = true,
   id,
+  allowReadOnly,
 }: {
   action: Action;
   children: ReactNode;
@@ -28,6 +30,8 @@ export function ActionForm({
   resetOnSuccess?: boolean;
   showSuccess?: boolean;
   id?: string;
+  /** show this form to view-only users too (e.g. marking notifications read, changing their own password) */
+  allowReadOnly?: boolean;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -39,6 +43,9 @@ export function ActionForm({
     else router.refresh();
     if (resetOnSuccess) formRef.current?.reset();
   }, [state, router, resetOnSuccess]);
+
+  const readOnly = useReadOnly();
+  if (readOnly && !allowReadOnly) return null;
 
   return (
     <form

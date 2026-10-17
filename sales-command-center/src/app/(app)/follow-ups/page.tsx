@@ -10,6 +10,7 @@ import { DueBadge, LeadStatusBadge } from "@/components/badges";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { followUpStatusAction, moveFollowUpAction } from "@/app/actions/followups";
 import { addDays, dateKeyInTz, dayRangeUtc, fmtDate, fmtTime } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Follow-ups" };
 
@@ -70,7 +71,7 @@ export default async function FollowUpsPage({ searchParams }: { searchParams: Pr
                 {f.status === "OPEN" ? (
                   <div className="flex flex-wrap items-center gap-1">
                     {f.lead.phone && <a href={`tel:${f.lead.phone.replace(/[^\d+]/g, "")}`} className="btn-secondary btn-sm">Call</a>}
-                    <Link href={`/leads/${f.lead.id}/visit?type=PHONE_CALL&returnTo=/follow-ups`} className="btn-secondary btn-sm">Log contact</Link>
+                    <WriteOnly><Link href={`/leads/${f.lead.id}/visit?type=PHONE_CALL&returnTo=/follow-ups`} className="btn-secondary btn-sm">Log contact</Link></WriteOnly>
                     <ActionForm action={followUpStatusAction}><input type="hidden" name="id" value={f.id} /><input type="hidden" name="status" value="DONE" /><SubmitButton className="btn-primary btn-sm">Done</SubmitButton></ActionForm>
                     <ActionForm action={moveFollowUpAction} className="flex items-center gap-1"><input type="hidden" name="id" value={f.id} /><input type="date" name="dueDate" defaultValue={addDays(today, 1)} className="input w-[140px] py-1" aria-label="New due date" /><SubmitButton className="btn-ghost btn-sm">Move</SubmitButton></ActionForm>
                     <ActionForm action={followUpStatusAction} confirm="Cancel this follow-up?"><input type="hidden" name="id" value={f.id} /><input type="hidden" name="status" value="CANCELED" /><SubmitButton className="btn-ghost btn-sm">Cancel</SubmitButton></ActionForm>

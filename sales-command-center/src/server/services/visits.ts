@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { InterestLevel, LeadStatus, VisitOutcome, VisitType } from "@prisma/client";
 import { prisma } from "../db";
 import { audit } from "../audit";
-import { assertLeadAccess, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertLeadAccess, isCoordinator, type Actor } from "../policy";
 import { invalid, notFound } from "../errors";
 import { refreshLeadRollups } from "./rollups";
 import { createFollowUpInTx } from "./followups";
@@ -56,6 +56,7 @@ export type VisitInput = z.input<typeof visitSchema>;
  *  6. coordinator notified of new feedback
  */
 export async function recordVisit(actor: Actor, raw: VisitInput, attachment?: StoredFile | null) {
+  assertWriter(actor);
   const d = visitSchema.parse(raw);
   if (d.clientKey) {
     const existing = await prisma.visit.findUnique({ where: { clientKey: d.clientKey } });

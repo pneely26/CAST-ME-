@@ -43,7 +43,7 @@ export default async function SettingsPage() {
           <KV label="Email">{me.email}</KV>
           <KV label="Member since">{fmtDate(me.createdAt, tz)}</KV>
         </div>
-        <ActionForm action={changeOwnPasswordAction} resetOnSuccess className="space-y-2">
+        <ActionForm allowReadOnly action={changeOwnPasswordAction} resetOnSuccess className="space-y-2">
           <input type="password" name="current" autoComplete="current-password" required placeholder="Current password" aria-label="Current password" className="input" />
           <input type="password" name="password" autoComplete="new-password" required minLength={10} placeholder="New password (10+ characters)" aria-label="New password" className="input" />
           <input type="password" name="confirm" autoComplete="new-password" required minLength={10} placeholder="Repeat new password" aria-label="Repeat new password" className="input" />

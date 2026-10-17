@@ -12,13 +12,15 @@ import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { archiveOpportunityAction } from "@/app/actions/sales";
 import { PAYMENT_STATUS_LABEL, money } from "@/lib/labels";
 import { dateKeyInTz, fmtDate, fmtDateTime, fmtDateKey } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Opportunity" };
 
 export default async function OppPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ msg?: string; edit?: string }> }) {
   const { id } = await params;
-  const { msg, edit } = await searchParams;
+  const { msg, edit: editParam } = await searchParams;
   const actor = await requireActor();
+  const edit = editParam && actor.role === "COORDINATOR" ? editParam : undefined; // reps are view-only
   const tz = (await getSettings()).timezone;
   const o = await prisma.opportunity.findUnique({ where: { id }, include: { lead: true, rep: { select: { name: true } }, sourceVisit: { select: { id: true, visitAt: true } } } });
   if (!o) notFound();
@@ -37,7 +39,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
         back={{ href: "/sales", label: "Sales" }}
         title={`O-${o.oppNumber} · ${o.product}`}
         subtitle={<span className="flex flex-wrap items-center gap-2"><OppStatusBadge s={o.status} />{o.archivedAt && <Badge tone="muted">Archived</Badge>}<Link className="link" href={`/leads/${o.leadId}?tab=sales`}>{o.lead.businessName}</Link> · {o.rep.name}</span>}
-        actions={!edit ? <Link href={`/sales/${o.id}?edit=1`} className="btn-primary">Edit</Link> : undefined}
+        actions={!edit ? <WriteOnly><Link href={`/sales/${o.id}?edit=1`} className="btn-primary">Edit</Link></WriteOnly> : undefined}
       />
       <Flash message={msg} />
       {edit ? (

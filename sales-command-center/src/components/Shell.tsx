@@ -1,5 +1,6 @@
 "use client";
 
+import { ReadOnlyProvider } from "./ReadOnly";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -113,7 +114,7 @@ export function Shell({ role, name, counts, children }: { role: "COORDINATOR" | 
       )}
 
       <div className="lg:pl-60">
-        <main className={clsx("mx-auto max-w-7xl px-4 py-5 sm:px-6", role === "REP" && "pb-24 lg:pb-6")}>{children}</main>
+        <main className={clsx("mx-auto max-w-7xl px-4 py-5 sm:px-6", role === "REP" && "pb-24 lg:pb-6")}><ReadOnlyProvider readOnly={role === "REP"}>{children}</ReadOnlyProvider></main>
       </div>
 
       {/* rep bottom tabs on phones */}

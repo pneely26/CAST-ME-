@@ -38,23 +38,25 @@ await c.waitForURL(/\/leads\/c[a-z0-9]{20,}/, { waitUntil: "commit" }); await c.
 const leadId = c.url().match(/leads\/(c[a-z0-9]+)/)[1];
 check("coordinator created lead", !!leadId);
 
-// 2. rep sees it on phone and records a visit with a follow-up
+// 2. rep sees it on phone (view-only); the coordinator records the visit
 const r = await login(...REP, { width: 390, height: 844 });
 await r.goto(base + "/leads");
 check("rep sees assigned lead", (await r.locator(`text=${name}`).count()) > 0);
 await r.goto(base + `/leads/${leadId}/visit`);
-await r.locator("button", { hasText: /^Interested$/ }).click();
-await r.fill("textarea[name=feedback]", "E2E: owner wants a quote — exact words kept.");
-await r.locator("label", { hasText: "Set a follow-up" }).locator("input").check();
-await r.fill("input[name=followUpAction]", "Send quote");
-await r.locator("button", { hasText: "Save visit" }).click();
-await r.waitForURL((u) => !u.pathname.endsWith("/visit"), { waitUntil: "commit" }); await r.waitForLoadState();
+check("rep can't open the visit form (view-only)", (await r.locator("text=view-only access").count()) > 0 && (await r.locator("button", { hasText: "Save visit" }).count()) === 0);
+await r.goto(base + `/leads/${leadId}`);
+check("rep sees no Record visit / Record sale buttons", (await r.locator("a", { hasText: /Record visit|Record sale|Schedule appointment/ }).count()) === 0);
+await c.goto(base + `/leads/${leadId}/visit`);
+await c.locator("button", { hasText: /^Interested$/ }).click();
+await c.fill("textarea[name=feedback]", "E2E: owner wants a quote — exact words kept.");
+await c.locator("label", { hasText: "Set a follow-up" }).locator("input").check();
+await c.fill("input[name=followUpAction]", "Send quote");
+await c.locator("button", { hasText: "Save visit" }).click();
+await c.waitForURL((u) => !u.pathname.endsWith("/visit"), { waitUntil: "commit" }); await c.waitForLoadState();
 await r.goto(base + `/leads/${leadId}?tab=visits`);
-check("visit + verbatim feedback on lead", (await r.locator("text=E2E: owner wants a quote — exact words kept.").count()) > 0);
+check("rep sees the visit + verbatim feedback in history", (await r.locator("text=E2E: owner wants a quote — exact words kept.").count()) > 0);
 
-// 3. coordinator sees feedback notification and books an appointment
-await c.goto(base + "/notifications");
-check("coordinator notified of feedback", (await c.locator(`text=${name}`).count()) > 0);
+// 3. coordinator books an appointment
 const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA", { timeZone: process.env.APP_TIMEZONE ?? "America/Chicago" });
 await c.goto(base + `/appointments/new?lead=${leadId}`);
 await c.fill("input[name=date]", tomorrow); await c.fill("input[name=time]", "11:00");
@@ -93,14 +95,9 @@ check("rep blocked from direct move", repMove.ok === false, repMove.error);
 // a random slot 2–9 days out so repeated runs don't collide with earlier runs' appointments
 const reqStart = new Date(Math.round((Date.now() + 2 * 86400000 + Math.floor(Math.random() * 7 * 24) * 3600000) / 3600000) * 3600000);
 const reqRes = await r.request.post(base + "/api/reschedules/request", { data: { id: apptId, start: reqStart.toISOString(), end: new Date(reqStart.getTime() + 2700000).toISOString(), reason: "Owner asked for later" } }).then((x) => x.json());
-check("rep reschedule request accepted", reqRes.ok === true, reqRes.error);
-await c.goto(base + "/reschedules");
-await c.locator("a", { hasText: name }).first().locator("xpath=ancestor::*[.//button[normalize-space()='Approve']][1]").locator("button", { hasText: /^Approve$/ }).click();
-await c.waitForTimeout(2000);
-const approveAlert = await c.locator("form p[role=alert]").first().innerText().catch(() => "");
-if (approveAlert) console.log("   approve alert:", approveAlert);
-const st = await c.request.get(base + `/appointments/${apptId}`).then((x) => x.text());
-check("coordinator approved reschedule", /Approved|approved/.test(st));
+check("rep can't request a reschedule (view-only)", reqRes.ok === false && /view-only/.test(reqRes.error ?? ""), reqRes.error);
+await r.goto(base + `/appointments/${apptId}`);
+check("rep can see the appointment and its history", (await r.locator("text=History").count()) > 0 && (await r.locator("main form").count()) === 0);
 
 // 6. sale recorded and counted
 await c.goto(base + `/sales/new?lead=${leadId}`);

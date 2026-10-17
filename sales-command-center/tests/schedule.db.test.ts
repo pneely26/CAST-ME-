@@ -55,7 +55,7 @@ describe.skipIf(!TEST_URL)("schedule, appointments & reschedules (database)", ()
     expect(repView[0].stops.map((x) => x.lead.id)).toContain(lead.id);
     await expect(s.getSchedule(U.rep2, U.rep.id, today, 1)).rejects.toThrow(); // other rep can't see it
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).nextPlannedVisit).not.toBeNull();
-    await visits.recordVisit(U.rep, { leadId: lead.id, visitAt: new Date(), type: "WALK_IN", outcome: "LEFT_INFORMATION" });
+    await visits.recordVisit(U.coordinator, { leadId: lead.id, repId: U.rep.id, visitAt: new Date(), type: "WALK_IN", outcome: "LEFT_INFORMATION" });
     const stop = await prisma.dayPlanStop.findFirstOrThrow({ where: { leadId: lead.id } });
     expect(stop.status).toBe("VISITED");
     expect(stop.visitId).not.toBeNull();
@@ -71,9 +71,10 @@ describe.skipIf(!TEST_URL)("schedule, appointments & reschedules (database)", ()
     // rep can't move directly
     await expect(ap.moveAppointment(U.rep, appt.id, new Date(start.getTime() + 86_400_000), new Date(start.getTime() + 90_000_000), "x")).rejects.toThrow(/request/);
     const newStart = zonedToUtc(addDays(nextMonday, 2), "14:00", TZ);
-    const req = await rs.requestReschedule(U.rep, { appointmentId: appt.id, requestedStart: newStart, requestedEnd: new Date(newStart.getTime() + 3_600_000), reason: "Owner traveling Tuesday" });
-    expect(await prisma.notification.count({ where: { userId: U.coordinator.id, type: "RESCHEDULE_REQUESTED" } })).toBe(1);
-    await expect(rs.requestReschedule(U.rep, { appointmentId: appt.id, requestedStart: newStart, requestedEnd: new Date(newStart.getTime() + 3_600_000), reason: "again" })).rejects.toThrow(/already a pending/);
+    // reps are view-only: they can't even request a change
+    await expect(rs.requestReschedule(U.rep, { appointmentId: appt.id, requestedStart: newStart, requestedEnd: new Date(newStart.getTime() + 3_600_000), reason: "x" })).rejects.toThrow(/view-only/);
+    const req = await rs.requestReschedule(U.coordinator, { appointmentId: appt.id, requestedStart: newStart, requestedEnd: new Date(newStart.getTime() + 3_600_000), reason: "Owner traveling Tuesday" });
+    await expect(rs.requestReschedule(U.coordinator, { appointmentId: appt.id, requestedStart: newStart, requestedEnd: new Date(newStart.getTime() + 3_600_000), reason: "again" })).rejects.toThrow(/already a pending/);
     await expect(rs.resolveReschedule(U.rep, req.id, "approve")).rejects.toThrow(/coordinator/);
     await rs.resolveReschedule(U.coordinator, req.id, "approve", { notes: "OK" });
     const after = await prisma.appointment.findUniqueOrThrow({ where: { id: appt.id }, include: { changes: true } });
@@ -84,15 +85,14 @@ describe.skipIf(!TEST_URL)("schedule, appointments & reschedules (database)", ()
     expect(moved.rescheduleRequestId).toBe(req.id);
     expect((await prisma.rescheduleRequest.findUniqueOrThrow({ where: { id: req.id } })).status).toBe("APPROVED");
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).nextAppointmentAt?.getTime()).toBe(newStart.getTime());
-    expect(await prisma.notification.count({ where: { userId: U.rep.id, type: "RESCHEDULE_APPROVED" } })).toBe(1);
     await expect(rs.resolveReschedule(U.coordinator, req.id, "decline", { notes: "late" })).rejects.toThrow(/already approved/);
   });
 
   it("declined requests leave the appointment unchanged; canceled appointments stay in history", async () => {
     const lead = await leads.createLead(U.coordinator, { businessName: "Decline Dental", assignedRepId: U.rep.id });
     const start = zonedToUtc(addDays(nextMonday, 3), "11:00", TZ);
-    const appt = await ap.createAppointment(U.rep, { leadId: lead.id, startAt: start, endAt: new Date(start.getTime() + 1_800_000) });
-    const req = await rs.requestReschedule(U.rep, { appointmentId: appt.id, requestedStart: new Date(start.getTime() + 86_400_000), requestedEnd: new Date(start.getTime() + 88_200_000), reason: "Conflict" });
+    const appt = await ap.createAppointment(U.coordinator, { leadId: lead.id, startAt: start, endAt: new Date(start.getTime() + 1_800_000) });
+    const req = await rs.requestReschedule(U.coordinator, { appointmentId: appt.id, requestedStart: new Date(start.getTime() + 86_400_000), requestedEnd: new Date(start.getTime() + 88_200_000), reason: "Conflict" });
     await expect(rs.resolveReschedule(U.coordinator, req.id, "decline")).rejects.toThrow(/note/);
     await rs.resolveReschedule(U.coordinator, req.id, "decline", { notes: "They confirmed Thursday" });
     expect((await prisma.appointment.findUniqueOrThrow({ where: { id: appt.id } })).startAt.getTime()).toBe(start.getTime());

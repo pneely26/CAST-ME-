@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireActor } from "@/server/auth";
+import { can, VIEW_ONLY_MESSAGE } from "@/server/policy";
 import { prisma } from "@/server/db";
 import { getActiveTemplate } from "@/server/services/schedule";
 import { repOptions } from "@/server/options";
@@ -17,6 +18,7 @@ const ORDER = [1, 2, 3, 4, 5, 6, 0]; // Monday first
 export default async function TemplatePage({ searchParams }: { searchParams: Promise<SP> }) {
   const params = await searchParams;
   const actor = await requireActor();
+  if (!can(actor, "data.write")) return <div className="card"><Empty>{VIEW_ONLY_MESSAGE}</Empty></div>;
   const reps = actor.role === "COORDINATOR" ? await repOptions() : [{ id: actor.id, name: actor.name }];
   const repId = actor.role === "REP" ? actor.id : (sp(params, "rep") ?? reps[0]?.id);
   if (!repId) return <div className="card"><Empty>Add a sales rep first.</Empty></div>;

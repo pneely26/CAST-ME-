@@ -7,6 +7,7 @@ import { repOptions } from "@/server/options";
 import { Badge, Empty, Flash, PageHeader } from "@/components/ui";
 import { ApptStatusBadge } from "@/components/badges";
 import { fmtDateKey, fmtTime, dateKeyInTz, apptTimeRange } from "@/lib/time";
+import { WriteOnly } from "@/components/ReadOnly";
 
 export const metadata = { title: "Appointments" };
 
@@ -21,7 +22,7 @@ export default async function AppointmentsPage({ searchParams }: { searchParams:
   let lastDay = "";
   return (
     <div className="space-y-4">
-      <PageHeader title="Appointments" subtitle="Canceled and rescheduled appointments stay in the history." actions={<>{actor.role === "COORDINATOR" && <a href={`/api/export/appointments?${qs}`} className="btn-secondary">Export CSV</a>}<Link href="/appointments/new" className="btn-primary">New appointment</Link></>} />
+      <PageHeader title="Appointments" subtitle="Canceled and rescheduled appointments stay in the history." actions={<>{actor.role === "COORDINATOR" && <a href={`/api/export/appointments?${qs}`} className="btn-secondary">Export CSV</a>}<WriteOnly><Link href="/appointments/new" className="btn-primary">New appointment</Link></WriteOnly></>} />
       <Flash message={sp(params, "msg")} />
       <div className="flex flex-wrap items-center gap-1.5">
         {tabs.map(([k, l]) => <Link key={k} href={`/appointments?status=${k}${sp(params, "rep") ? `&rep=${sp(params, "rep")}` : ""}`} className={status === k ? "btn-primary btn-sm" : "btn-secondary btn-sm"}>{l}</Link>)}

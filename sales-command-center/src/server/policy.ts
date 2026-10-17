@@ -21,6 +21,7 @@ export type Permission =
   | "lead.exportAll"
   | "lead.edit"
   | "data.export"
+  | "data.write"
   | "territory.manage"
   | "schedule.manageAll"
   | "appointment.moveDirect"
@@ -44,6 +45,7 @@ const COORDINATOR_ONLY: Permission[] = [
   "lead.exportAll",
   "lead.edit",
   "data.export",
+  "data.write",
   "territory.manage",
   "schedule.manageAll",
   "appointment.moveDirect",
@@ -88,4 +90,11 @@ export function assertLeadAccess(actor: Actor, lead: { assignedRepId: string | n
 export function assertOwnOrCoordinator(actor: Actor, ownerId: string | null | undefined, message?: string): void {
   if (actor.role === "COORDINATOR") return;
   if (ownerId !== actor.id) throw forbidden(message);
+}
+
+export const VIEW_ONLY_MESSAGE = "Sales reps have view-only access. Ask the coordinator to make this change.";
+
+/** Every change to records goes through the coordinator; reps can look but not change anything. */
+export function assertWriter(actor: Actor) {
+  assertCan(actor, "data.write", VIEW_ONLY_MESSAGE);
 }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma, type Tx } from "../db";
 import { audit } from "../audit";
-import { assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
 import { invalid, notFound } from "../errors";
 import { refreshLeadRollups } from "./rollups";
 import { notify } from "./notifications";
@@ -18,6 +18,7 @@ export const followUpSchema = z.object({
 });
 
 export async function createFollowUpInTx(tx: Tx, actor: Actor, raw: z.input<typeof followUpSchema>) {
+  assertWriter(actor);
   const d = followUpSchema.parse(raw);
   const lead = await tx.lead.findUnique({ where: { id: d.leadId } });
   if (!lead) throw notFound("Lead");
@@ -43,6 +44,7 @@ export async function createFollowUp(actor: Actor, raw: z.input<typeof followUpS
 }
 
 export async function setFollowUpStatus(actor: Actor, id: string, status: "DONE" | "CANCELED" | "OPEN", note?: string) {
+  assertWriter(actor);
   return prisma.$transaction(async (tx) => {
     const fu = await tx.followUp.findUnique({ where: { id }, include: { lead: true } });
     if (!fu) throw notFound("Follow-up");
@@ -55,6 +57,7 @@ export async function setFollowUpStatus(actor: Actor, id: string, status: "DONE"
 }
 
 export async function rescheduleFollowUp(actor: Actor, id: string, dueAt: Date) {
+  assertWriter(actor);
   if (isNaN(dueAt.getTime())) throw invalid("Choose a valid date.");
   return prisma.$transaction(async (tx) => {
     const fu = await tx.followUp.findUnique({ where: { id }, include: { lead: true } });

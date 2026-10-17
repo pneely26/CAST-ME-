@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { OpportunityStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { audit, diff } from "../audit";
-import { assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
+import { assertWriter, assertLeadAccess, assertOwnOrCoordinator, isCoordinator, type Actor } from "../policy";
 import { conflict, invalid, notFound } from "../errors";
 import { changeLeadStatusInTx } from "./leads";
 import { notifyCoordinators, notify } from "./notifications";
@@ -63,6 +63,7 @@ function money2(v: unknown) {
 
 /** Create or update. Winning a deal sets its close date and final amount and marks the lead Won. */
 export async function saveOpportunity(actor: Actor, id: string | null, raw: OpportunityInput, expectedVersion?: number) {
+  assertWriter(actor);
   const d = opportunitySchema.parse(raw);
   return prisma.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({ where: { id: d.leadId } });
