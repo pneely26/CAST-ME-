@@ -93,7 +93,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           <>
             {!lead.archivedAt && <Link href={`/leads/${lead.id}/visit`} className="btn-primary">Record visit</Link>}
             {!lead.archivedAt && lead.status !== "DO_NOT_CONTACT" && <Link href={`/appointments/new?lead=${lead.id}`} className="btn-secondary">Schedule appointment</Link>}
-            {!lead.archivedAt && <Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">New opportunity</Link>}
+            {!lead.archivedAt && <Link href={`/sales/new?lead=${lead.id}`} className="btn-secondary">Record sale</Link>}
             {isCoord && <Link href={`/leads/${lead.id}/edit`} className="btn-secondary">Edit</Link>}
           </>
         }
@@ -117,6 +117,30 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       {tab === "overview" && (
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
+            <Section title="Sale" subtitle="Signed 44, run date, GO status and desk calls for this lead's sales" action={!lead.archivedAt ? <Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link> : undefined}>
+              {lead.opportunities.length === 0 ? (
+                <Empty>No sale recorded yet. Tap “Record sale” to add one with Signed 44, run date, GO status and desk call.</Empty>
+              ) : (
+                <ul className="divide-y divide-line-2">
+                  {lead.opportunities.map((o) => (
+                    <li key={o.id} className="px-4 py-3">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Link className="font-medium hover:underline" href={`/sales/${o.id}`}>{o.product}</Link>
+                        <OppStatusBadge s={o.status} />
+                        {o.status === "WON" && <span className="text-sm text-muted">{money(o.finalAmount ? Number(o.finalAmount) : null)}</span>}
+                        <Link className="link ml-auto text-xs" href={`/sales/${o.id}?edit=1`}>Edit sale</Link>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        <KV label="Signed 44">{o.signed44 ? <Badge tone="good">Yes</Badge> : "No"}</KV>
+                        <KV label="Run date">{o.runDate ? fmtDateKey(o.runDate) : "—"}</KV>
+                        <KV label="GO status">{o.goStatus || "—"}</KV>
+                        <KV label="Called to desk">{o.calledToDesk ? <>Yes{o.tentativeRunDate ? <span className="block text-xs text-muted">Tentative run {fmtDateKey(o.tentativeRunDate)}</span> : null}</> : "No"}</KV>
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
             <Section title="Summary">
               <dl className="grid grid-cols-2 gap-4 p-4 md:grid-cols-3">
                 <KV label="Last visited">{lead.lastVisitAt ? `${fmtDate(lead.lastVisitAt, tz)} (${relativeDay(lead.lastVisitAt, tz, now)})` : <Badge tone="warn">Never visited</Badge>}</KV>
@@ -339,7 +363,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "sales" && (
-        <Section title="Opportunities & sales" action={!lead.archivedAt ? <Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">New opportunity</Link> : undefined}>
+        <Section title="Opportunities & sales" action={!lead.archivedAt ? <Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link> : undefined}>
           {lead.opportunities.length === 0 ? <Empty>No opportunities yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="tbl">
