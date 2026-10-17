@@ -93,7 +93,7 @@ export function OpportunityForm({ d, leads, reps, today }: { d: OppDefaults; lea
           <span>{won ? "I confirm this sale closed and the final amount is correct. It will count toward realized revenue." : lost ? "I confirm this opportunity is lost." : "I confirm reopening this won sale — it will no longer count toward realized revenue."}</span>
         </label>
       )}
-      <div className="sm:col-span-2"><SubmitButton>{d.id ? "Save changes" : won ? "Record sale" : "Create opportunity"}</SubmitButton></div>
+      <div className="sm:col-span-2"><SubmitButton>{d.id ? "Save changes" : "Save sale"}</SubmitButton></div>
     </ActionForm>
   );
 }

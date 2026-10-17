@@ -8,7 +8,7 @@ import { Flash, PageHeader } from "@/components/ui";
 import { OpportunityForm } from "@/components/OpportunityForm";
 import { dateKeyInTz } from "@/lib/time";
 
-export const metadata = { title: "New opportunity" };
+export const metadata = { title: "Record sale" };
 
 export default async function NewOppPage({ searchParams }: { searchParams: Promise<SP> }) {
   const params = await searchParams;
@@ -21,7 +21,7 @@ export default async function NewOppPage({ searchParams }: { searchParams: Promi
   const lead = leads.find((l) => l.id === leadId);
   return (
     <div className="max-w-3xl">
-      <PageHeader back={{ href: lead ? `/leads/${lead.id}?tab=sales` : "/sales", label: lead?.businessName ?? "Sales" }} title={fromVisit?.outcome === "SALE_COMPLETED" ? "Record the sale" : "New opportunity"} subtitle={lead ? lead.businessName : undefined} />
+      <PageHeader back={{ href: lead ? `/leads/${lead.id}?tab=sales` : "/sales", label: lead?.businessName ?? "Sales" }} title="Record sale" subtitle={lead ? lead.businessName : undefined} />
       <Flash message={sp(params, "msg")} />
       <OpportunityForm
         today={dateKeyInTz(new Date(), tz)}

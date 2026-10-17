@@ -118,7 +118,7 @@ for (const kind of ["leads", "visits", "appointments", "sales", "reports"]) {
   check(`rep blocked from ${kind} export`, res.status() === 403, String(res.status()));
 }
 await r.goto(base + `/leads/${leadId}`);
-check("rep sees no Edit or status controls on a lead", (await r.locator("a", { hasText: /^Edit$/ }).count()) === 0 && (await r.locator("select[name=status]").count()) === 0);
+check("rep sees no lead Edit or status controls", (await r.locator(`a[href="/leads/${leadId}/edit"]`).count()) === 0 && (await r.locator("select[name=status]").count()) === 0);
 await r.goto(base + `/leads/${leadId}/edit`);
 check("rep edit page is blocked", (await r.locator("text=Only the coordinator can change lead details").count()) > 0);
 await r.goto(base + "/leads");
