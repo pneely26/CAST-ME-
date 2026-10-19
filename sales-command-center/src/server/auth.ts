@@ -34,7 +34,7 @@ export async function actorOrThrow(): Promise<Actor> {
   return a;
 }
 
-export async function login(email: string, password: string, clientKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function login(email: string, password: string, clientKey: string, device = "Unknown device"): Promise<{ ok: true } | { ok: false; error: string }> {
   const now = Date.now();
   const k = `${clientKey}:${email.toLowerCase()}`;
   const a = attempts.get(k);
@@ -44,12 +44,15 @@ export async function login(email: string, password: string, clientKey: string):
   dummyHash ??= bcrypt.hashSync("not-a-real-password", 12);
   const ok = await bcrypt.compare(password, user?.passwordHash ?? dummyHash);
   if (!user || !ok || !user.active) {
+    // record failed attempts against a real account so the coordinator can see them
+    if (user) await prisma.auditLog.create({ data: { actorId: user.id, action: "auth.failed", entityType: "User", entityId: user.id, summary: `Failed sign-in attempt${user.active ? " (wrong password)" : " (account deactivated)"} · ${device}`, data: { device } } }).catch(() => {});
     const count = (a?.count ?? 0) + 1;
     attempts.set(k, { count, until: count >= 5 ? now + 5 * 60_000 : 0 });
     return { ok: false, error: user && !user.active ? "This account is deactivated." : "Incorrect email or password." };
   }
   attempts.delete(k);
   await setSessionCookie(user);
+  await prisma.auditLog.create({ data: { actorId: user.id, action: "auth.login", entityType: "User", entityId: user.id, summary: `Signed in · ${device}`, data: { device } } }).catch(() => {});
   return { ok: true };
 }
 

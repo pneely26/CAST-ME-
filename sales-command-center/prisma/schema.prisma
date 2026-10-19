@@ -192,6 +192,7 @@ model User {
   importBatches      ImportBatch[]
   auditLogs          AuditLog[]
   savedViews         SavedView[]
+  pageViews          PageView[]
 }
 
 model Territory {
@@ -678,4 +679,18 @@ model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/// A page a sales rep opened in the app (for the coordinator's activity log).
+model PageView {
+  id        String   @id @default(cuid())
+  userId    String
+  path      String
+  device    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }

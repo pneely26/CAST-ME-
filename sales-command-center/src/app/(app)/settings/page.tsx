@@ -3,6 +3,7 @@ import { can } from "@/server/policy";
 import { prisma } from "@/server/db";
 import { getSettings } from "@/server/settings";
 import { listUsers } from "@/server/services/users";
+import { repLastSeen } from "@/server/services/activity";
 import { demoStatus } from "@/server/services/demo";
 import { lastReminderRun } from "@/server/services/reminders";
 import { externalChannels } from "@/server/services/notifications";
@@ -50,11 +51,13 @@ export default async function SettingsPage() {
           <SubmitButton className="btn-secondary">Change password</SubmitButton>
         </ActionForm>
       </div>
+      {me.role === "REP" && <p className="border-t border-line px-4 py-3 text-xs text-muted">Your sign-ins and the pages you open in this app are recorded and visible to your coordinator.</p>}
     </Section>
   );
   if (!coord) return <div className="max-w-4xl space-y-4"><PageHeader title="Settings" />{account}</div>;
 
   const [users, demo, lastRun] = await Promise.all([listUsers(actor), demoStatus(), lastReminderRun()]);
+  const seen = await repLastSeen(users.map((u) => u.id));
   const provider = extractionStatus();
   const channels = externalChannels.filter((c) => c.enabled()).map((c) => c.id);
   const zones = ZONES.includes(tz) ? ZONES : [tz, ...ZONES];
@@ -66,7 +69,7 @@ export default async function SettingsPage() {
       <Section title="Users" subtitle="Deactivating someone signs them out and blocks login; their history is kept.">
         <div className="overflow-x-auto">
           <table className="tbl">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th className="text-right">Assigned leads</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th className="text-right">Assigned leads</th><th>Status</th><th>Last seen</th><th /></tr></thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.id} className="align-top">
@@ -75,6 +78,7 @@ export default async function SettingsPage() {
                   <td>{u.role === "COORDINATOR" ? "Coordinator" : "Sales rep"}</td>
                   <td className="text-right tabular-nums">{u.role === "REP" ? u.assignedLeads : "—"}</td>
                   <td>{u.active ? <Badge tone="good">Active</Badge> : <Badge tone="muted">Deactivated</Badge>}</td>
+                  <td className="whitespace-nowrap text-sm">{u.role === "REP" ? (seen.get(u.id) ? <a className="link" href={`/activity?rep=${u.id}`}>{fmtDateTime(seen.get(u.id)!, tz)}</a> : "Never") : "—"}</td>
                   <td className="min-w-[280px]">
                     <details>
                       <summary className="cursor-pointer text-sm text-accent">Manage</summary>

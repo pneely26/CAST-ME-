@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { getSettings } from "../settings";
 import { notify, notifyCoordinators } from "./notifications";
+import { prunePageViews } from "./activity";
 import { ACTIVE_APPOINTMENT_STATUSES, CLOSED_STATUSES } from "@/lib/labels";
 import { dateKeyInTz, dayRangeUtc, fmtDateTime, fmtTime, weekStartKey } from "@/lib/time";
 
@@ -76,6 +77,7 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
   }
 
   out.created = (await prisma.notification.count()) - before;
+  await prunePageViews();
   await prisma.appSetting.upsert({ where: { key: "lastReminderRun" }, update: { value: now.toISOString() }, create: { key: "lastReminderRun", value: now.toISOString() } });
   return out;
 }
