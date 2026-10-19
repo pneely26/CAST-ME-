@@ -28,6 +28,8 @@ export interface OppDefaults {
   calledToDesk?: boolean;
   tentativeRunDate?: string;
   sourceVisitId?: string | null;
+  /** imported from a sales report, which has no dollar amounts */
+  amountOptional?: boolean;
 }
 
 export function OpportunityForm({ d, leads, reps, today }: { d: OppDefaults; leads?: { id: string; label: string }[]; reps?: { id: string; name: string }[]; today: string }) {
@@ -66,7 +68,7 @@ export function OpportunityForm({ d, leads, reps, today }: { d: OppDefaults; lea
       )}
       {won && (
         <>
-          <label className="block"><span className="label">Final sale amount ($) <span className="text-red-600">*</span></span><input name="finalAmount" inputMode="decimal" required defaultValue={d.finalAmount ?? d.estimatedValue} className="input" /></label>
+          <label className="block"><span className="label">Final sale amount ($) {d.amountOptional ? <span className="text-muted">(not in the sales report — optional)</span> : <span className="text-red-600">*</span>}</span><input name="finalAmount" inputMode="decimal" required={!d.amountOptional} defaultValue={d.finalAmount ?? d.estimatedValue} className="input" /></label>
           <label className="block"><span className="label">Payment status</span>
             <select name="paymentStatus" defaultValue={d.paymentStatus ?? "UNPAID"} className="input">{PAYMENT_STATUSES.map((p) => <option key={p} value={p}>{PAYMENT_STATUS_LABEL[p]}</option>)}</select>
           </label>

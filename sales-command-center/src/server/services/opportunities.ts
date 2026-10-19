@@ -52,7 +52,6 @@ export const opportunitySchema = z
     confirmed: z.boolean().default(false),
   })
   .superRefine((v, ctx) => {
-    if (v.status === "WON" && (v.finalAmount === null || v.finalAmount === undefined || v.finalAmount <= 0)) ctx.addIssue({ code: "custom", path: ["finalAmount"], message: "A won sale needs its final sale amount" });
     if (v.commissionRatePct !== null && v.commissionRatePct !== undefined && v.commissionRatePct > 100) ctx.addIssue({ code: "custom", path: ["commissionRatePct"], message: "Commission rate is a percentage (0–100)" });
   });
 export type OpportunityInput = z.input<typeof opportunitySchema>;
@@ -71,6 +70,8 @@ export async function saveOpportunity(actor: Actor, id: string | null, raw: Oppo
     assertLeadAccess(actor, lead);
     const before = id ? await tx.opportunity.findUnique({ where: { id } }) : null;
     if (id && !before) throw notFound("Opportunity");
+    // sales imported from a sales report may have no dollar amount (the report doesn't give one); every other won sale needs it
+    if (d.status === "WON" && !d.finalAmount && !before?.externalRef) throw invalid("A won sale needs its final sale amount");
     if (before) {
       assertOwnOrCoordinator(actor, before.repId, "This opportunity belongs to another rep.");
       if (before.leadId !== d.leadId) throw invalid("An opportunity can't be moved to a different lead — create a new one instead.");

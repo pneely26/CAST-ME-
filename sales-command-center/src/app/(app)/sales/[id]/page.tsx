@@ -31,6 +31,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
     notFound();
   }
   const history = await prisma.auditLog.findMany({ where: { entityType: "Opportunity", entityId: o.id }, orderBy: { createdAt: "desc" }, include: { actor: { select: { name: true } } } });
+  const details = o.sourceDetails && typeof o.sourceDetails === "object" && !Array.isArray(o.sourceDetails) ? (o.sourceDetails as Record<string, string>) : null;
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const key = (d: Date | null) => (d ? dateKeyInTz(d, tz) : undefined);
   return (
@@ -51,7 +52,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
             openedAt: key(o.openedAt), expectedCloseAt: key(o.expectedCloseAt), closedAt: key(o.closedAt),
             estimatedValue: o.estimatedValue?.toString(), finalAmount: o.finalAmount?.toString(),
             commissionRatePct: o.commissionRate ? (Number(o.commissionRate) * 100).toString() : undefined, commissionAmount: o.commissionAmount?.toString(),
-            paymentStatus: o.paymentStatus, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId, signed44: o.signed44, runDate: o.runDate ?? undefined, goStatus: o.goStatus ?? undefined, calledToDesk: o.calledToDesk, tentativeRunDate: o.tentativeRunDate ?? undefined,
+            paymentStatus: o.paymentStatus, amountOptional: !!o.externalRef, notes: o.notes ?? undefined, lostReason: o.lostReason ?? undefined, sourceVisitId: o.sourceVisitId, signed44: o.signed44, runDate: o.runDate ?? undefined, goStatus: o.goStatus ?? undefined, calledToDesk: o.calledToDesk, tentativeRunDate: o.tentativeRunDate ?? undefined,
           }}
         />
       ) : (
@@ -59,7 +60,7 @@ export default async function OppPage({ params, searchParams }: { params: Promis
           <Section title="Details" className="lg:col-span-2">
             <dl className="grid gap-4 p-4 sm:grid-cols-3">
               <KV label="Estimated value">{money(n(o.estimatedValue))}</KV>
-              <KV label="Final sale amount">{o.status === "WON" ? money(n(o.finalAmount), { cents: true }) : "—"}</KV>
+              <KV label="Final sale amount">{o.status === "WON" ? (o.finalAmount === null && o.externalRef ? "Not in the sales report" : money(n(o.finalAmount), { cents: true })) : "—"}</KV>
               <KV label="Payment">{o.status === "WON" ? PAYMENT_STATUS_LABEL[o.paymentStatus] : "—"}</KV>
               <KV label="Opened">{fmtDate(o.openedAt, tz)}</KV>
               <KV label="Expected close">{fmtDate(o.expectedCloseAt, tz)}</KV>
@@ -73,11 +74,17 @@ export default async function OppPage({ params, searchParams }: { params: Promis
               <KV label="Source visit">{o.sourceVisit ? <Link className="link" href={`/leads/${o.leadId}?tab=visits`}>{fmtDate(o.sourceVisit.visitAt, tz)}</Link> : "—"}</KV>
               {o.lostReason && <KV label="Reason lost">{o.lostReason}</KV>}
               {o.notes && <KV label="Notes" className="sm:col-span-3"><span className="whitespace-pre-line">{o.notes}</span></KV>}
+              {o.externalRef && <KV label="From sales report">PN/Job # {o.externalRef}</KV>}
               <KV label="Created">{fmtDateTime(o.createdAt, tz)}</KV>
               <KV label="Updated">{fmtDateTime(o.updatedAt, tz)}</KV>
             </dl>
           </Section>
           <div className="space-y-5">
+            {details && (
+              <Section title="Sales report details" subtitle="As printed in the report">
+                <dl className="grid grid-cols-2 gap-3 p-4">{Object.entries(details).map(([k, v]) => <KV key={k} label={k}>{v}</KV>)}</dl>
+              </Section>
+            )}
             <Section title="History">
               <ul className="divide-y divide-line-2">
                 {history.map((h) => <li key={h.id} className="px-4 py-2 text-sm">{h.summary}<div className="text-xs text-muted">{fmtDateTime(h.createdAt, tz)} · {h.actor?.name ?? "system"}</div></li>)}

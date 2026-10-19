@@ -146,6 +146,27 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
    - For each row, choose **Create**, **Merge** (fills only empty fields on the existing lead and appends notes word for word) or **Skip**.
    - **Import ready rows** creates only rows with no problems and no duplicate match. Everything else stays for review, so partial imports are fine.
 
+### Importing sales (BC History PDF)
+
+On **Import Leads → Sales report (PDF)**, upload a BC History sales report:
+
+1. **Pick the rep.** The report's sales reps are listed with their counts. Only the rep you pick is shown and recorded.
+2. **Matching.** Each **PN/Job #** becomes one **won sale** on the lead with that prospect #. A job printed on several lines (one per survey line) is still one sale.
+3. **What's saved:**
+   - **Survey Result** → GO status, as printed.
+   - The **44** check box → Signed 44.
+   - **Run Date** → run date.
+   - **Sale Date** → close date.
+   - RVOL, AVOL, SRC, Confirmer, Analyst, MS Status and Notes are kept on the sale under **Sales report details**.
+   - Only the text visible in the PDF is used. Text cut off in a narrow cell is not.
+4. **No amounts.** The report has no dollar amounts, so none are recorded. These sales count as closed sales but add nothing to realized revenue. A coordinator can add an amount later by editing the sale.
+5. **Rep on the sale:** the rep login named like the report's rep ("Mozzano, Louis" → Louis Mozzano). If there isn't one, the lead's rep is used. If the lead has no rep either, you choose a rep on the review page.
+6. **Before anything is saved:**
+   - Rows with no matching lead are listed and skipped.
+   - Leads that already have a sale entered by hand are flagged and left unticked.
+   - You confirm before anything is recorded.
+7. **Uploading again.** Uploading the same or a newer report updates the existing sales (GO status, run date, 44, …), with a history entry. It never adds duplicates.
+
 ---
 
 ## Scripts
