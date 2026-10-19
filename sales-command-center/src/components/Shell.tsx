@@ -1,6 +1,7 @@
 "use client";
 
 import { ReadOnlyProvider } from "./ReadOnly";
+import { ActivityTracker } from "./ActivityTracker";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -25,6 +26,7 @@ const COORDINATOR_NAV: Item[] = [
   { href: "/follow-ups", label: "Follow-ups", icon: "↻", badge: "followUpsDue" },
   { href: "/sales", label: "Sales", icon: "$" },
   { href: "/reports", label: "Reports", icon: "▥" },
+  { href: "/activity", label: "Rep Activity", icon: "◴" },
   { href: "/import", label: "Import Leads", icon: "⇪" },
 ];
 
@@ -114,7 +116,7 @@ export function Shell({ role, name, counts, children }: { role: "COORDINATOR" | 
       )}
 
       <div className="lg:pl-60">
-        <main className={clsx("mx-auto max-w-7xl px-4 py-5 sm:px-6", role === "REP" && "pb-24 lg:pb-6")}><ReadOnlyProvider readOnly={role === "REP"}>{children}</ReadOnlyProvider></main>
+        <main className={clsx("mx-auto max-w-7xl px-4 py-5 sm:px-6", role === "REP" && "pb-24 lg:pb-6")}>{role === "REP" && <ActivityTracker />}<ReadOnlyProvider readOnly={role === "REP"}>{children}</ReadOnlyProvider></main>
       </div>
 
       {/* rep bottom tabs on phones */}

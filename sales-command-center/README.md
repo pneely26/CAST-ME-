@@ -112,6 +112,11 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
   - Covers due and overdue follow-ups, upcoming appointments, and a weekly digest of leads not visited recently.
   - Created automatically (at most every 10 minutes) while anyone is using the app. Each reminder is created once.
   - For reminders when nobody has the app open, schedule `npm run reminders`, or call `/api/cron/reminders` with `Authorization: Bearer $CRON_SECRET`, every 15 minutes.
+- **Rep activity** (coordinator only, at `/activity`):
+  - Shows when each rep signed in and from what device, failed sign-in attempts, and each time they opened the app (a sign-in, or coming back after 30+ minutes away).
+  - Lists every page they viewed, in plain words (e.g. "Viewed lead Joe's Pizza — visit history").
+  - Users in Settings show **Last seen**.
+  - Reps are told on their account page that this is recorded. Page views are kept for a year.
 - **Audit log:** every change, assignment, export and setting change is recorded (coordinator only, at `/audit`).
 - **Demo data:**
   - Optional, from Settings or `npm run db:demo`.
