@@ -116,7 +116,7 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
   - Shows when each rep signed in and from what device, failed sign-in attempts, and each time they opened the app (a sign-in, or coming back after 30+ minutes away).
   - Lists every page they viewed, in plain words (e.g. "Viewed lead Joe's Pizza — visit history").
   - Users in Settings show **Last seen**.
-  - Reps are told on their account page that this is recorded. Page views are kept for a year.
+  - Only the coordinator can see it. Page views are kept for a year.
 - **Audit log:** every change, assignment, export and setting change is recorded (coordinator only, at `/audit`).
 - **Demo data:**
   - Optional, from Settings or `npm run db:demo`.
