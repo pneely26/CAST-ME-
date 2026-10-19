@@ -151,6 +151,7 @@ enum NotificationType {
 enum ImportKind {
   SCREENSHOT
   CSV
+  SALES_REPORT
 }
 
 enum ImportRecordStatus {
@@ -554,6 +555,9 @@ model Opportunity {
   goStatus         String?
   calledToDesk     Boolean           @default(false)
   tentativeRunDate String? // local date "YYYY-MM-DD"; set when the deal was called to the desk
+  // sales imported from a sales report: the report's PN-Job # (one sale per job) and its other columns, verbatim
+  externalRef      String?           @unique
+  sourceDetails    Json?
   lostReason       String?
   isDemo           Boolean           @default(false)
   archivedAt       DateTime?

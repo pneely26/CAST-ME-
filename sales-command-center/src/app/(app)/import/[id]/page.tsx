@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireActor } from "@/server/auth";
 import { can } from "@/server/policy";
+import { prisma } from "@/server/db";
 import { getSettings } from "@/server/settings";
 import { csvMeta, getBatchForReview, type ReviewView } from "@/server/services/imports";
 import { extractionStatus } from "@/server/extraction";
@@ -148,6 +150,7 @@ export default async function ImportReviewPage({ params, searchParams }: { param
   const q = await searchParams;
   const actor = await requireActor();
   if (!can(actor, "lead.import")) return <div className="card"><Empty>Only the coordinator can import leads.</Empty></div>;
+  if ((await prisma.importBatch.findUnique({ where: { id }, select: { kind: true } }))?.kind === "SALES_REPORT") redirect(`/import/sales/${id}`);
   const view = (["pending", "attention", "clean", "done", "all"].includes(sp(q, "view") ?? "") ? sp(q, "view") : "pending") as ReviewView;
   const page = Number(sp(q, "page") ?? 1) || 1;
   const [d, settings, reps, areas] = await Promise.all([getBatchForReview(actor, id, { view, page }), getSettings(), repOptions(), areaOptions()]);

@@ -7,6 +7,7 @@ import { extractionStatus } from "@/server/extraction";
 import { Badge, Empty, PageHeader, Section } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
 import { uploadCsvAction, uploadScreenshotsAction } from "@/app/actions/imports";
+import { uploadSalesReportAction } from "@/app/actions/salesImports";
 import { fmtDateTime } from "@/lib/time";
 
 export const metadata = { title: "Import Leads" };
@@ -18,7 +19,7 @@ export default async function ImportPage() {
   const provider = extractionStatus();
   return (
     <div className="max-w-5xl space-y-5">
-      <PageHeader title="Import Leads" subtitle="Upload screenshots or a CSV file. Every row is reviewed before it becomes a lead — nothing is added automatically, and duplicates are flagged." />
+      <PageHeader title="Import Leads" subtitle="Upload screenshots or a CSV file of leads, or a sales report PDF. Every row is reviewed first — nothing is added automatically, and duplicates are flagged." />
       {provider.configured ? (
         <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">Screenshot reading is on: <b>{provider.label}</b>. Images are sent to this provider from the server only. Values it can&apos;t see are left blank, never guessed.</p>
       ) : (
@@ -41,6 +42,12 @@ export default async function ImportPage() {
           </ActionForm>
         </Section>
       </div>
+      <Section title="Sales report (PDF)" subtitle="A BC History sales report. Each PN/Job # is recorded as a won sale on the lead with that prospect # — you pick the rep and review every sale first.">
+        <ActionForm action={uploadSalesReportAction} className="flex flex-wrap items-center gap-3 p-4">
+          <input type="file" name="file" accept="application/pdf,.pdf" required className="block text-sm" aria-label="Sales report PDF" />
+          <SubmitButton>Upload sales report</SubmitButton>
+        </ActionForm>
+      </Section>
       <Section title="Imports">
         {batches.length ? (
           <div className="overflow-x-auto">
@@ -52,16 +59,16 @@ export default async function ImportPage() {
                   return (
                     <tr key={b.id}>
                       <td className="whitespace-nowrap">{fmtDateTime(b.createdAt, settings.timezone)}</td>
-                      <td>{b.kind === "CSV" ? "CSV" : `${b._count.images} screenshot(s)`}</td>
+                      <td>{b.kind === "CSV" ? "CSV" : b.kind === "SALES_REPORT" ? "Sales report" : `${b._count.images} screenshot(s)`}</td>
                       <td>{b.createdBy.name}</td>
                       <td className="text-right tabular-nums">{b._count.records}</td>
                       <td className="space-x-1">
                         {b.completedAt ? <Badge tone="good">Complete</Badge> : <Badge tone="warn">{sc.PENDING ?? 0} to review</Badge>}
-                        {!!sc.IMPORTED && <Badge tone="good">{sc.IMPORTED} created</Badge>}
+                        {!!sc.IMPORTED && <Badge tone="good">{sc.IMPORTED} {b.kind === "SALES_REPORT" ? "recorded" : "created"}</Badge>}
                         {!!sc.MERGED && <Badge tone="accent">{sc.MERGED} merged</Badge>}
                         {!!sc.SKIPPED && <Badge tone="muted">{sc.SKIPPED} skipped</Badge>}
                       </td>
-                      <td><Link className="link" href={`/import/${b.id}`}>Review</Link></td>
+                      <td><Link className="link" href={b.kind === "SALES_REPORT" ? `/import/sales/${b.id}` : `/import/${b.id}`}>Review</Link></td>
                     </tr>
                   );
                 })}
