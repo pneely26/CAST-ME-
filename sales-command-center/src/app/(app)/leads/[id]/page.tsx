@@ -120,7 +120,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           <div className="space-y-5 lg:col-span-2">
             <Section title="Sale" subtitle="Signed 44, run date, GO status and desk calls for this lead's sales" action={!lead.archivedAt ? <WriteOnly><Link href={`/sales/new?lead=${lead.id}`} className="btn-primary btn-sm">Record sale</Link></WriteOnly> : undefined}>
               {lead.opportunities.length === 0 ? (
-                <Empty>No sale recorded yet. Tap “Record sale” to add one with Signed 44, run date, GO status and desk call.</Empty>
+                <Empty>{isCoord ? "No sale recorded yet. Tap “Record sale” to add one with Signed 44, run date, GO status and desk call." : "No sale recorded yet."}</Empty>
               ) : (
                 <ul className="divide-y divide-line-2">
                   {lead.opportunities.map((o) => (

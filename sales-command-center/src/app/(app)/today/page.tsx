@@ -66,7 +66,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">Planned visits</h2>
-        {day.stops.length === 0 ? <div className="card"><Empty action={<Link href={`/schedule/day/${today}`} className="btn-secondary">Plan today</Link>}>No businesses planned for today.</Empty></div> : (
+        {day.stops.length === 0 ? <div className="card"><Empty action={<Link href="/appointments" className="btn-secondary">See my appointments</Link>}>No businesses planned for today. Your coordinator plans your route.</Empty></div> : (
           <ol className="space-y-2">
             {day.stops.map((s, i) => (
               <li key={s.id} className={`card p-3 ${s.status !== "PLANNED" ? "opacity-70" : ""}`}>
