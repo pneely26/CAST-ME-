@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/server/auth";
 import { prisma } from "@/server/db";
 import { assertLeadAccess, can } from "@/server/policy";
-import { territoryOptions } from "@/server/services/territories";
 import { repOptions } from "@/server/options";
 import { PageHeader, Empty } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/ActionForm";
@@ -25,15 +24,15 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
   }
   const isCoord = can(actor, "lead.editAll");
   if (!can(actor, "lead.edit")) return <div className="card"><Empty>Only the coordinator can change lead details. Record a visit to report what happened.</Empty></div>;
-  const [territories, reps] = isCoord ? await Promise.all([territoryOptions(), repOptions()]) : [[], []];
+  const reps = isCoord ? await repOptions() : [];
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-6xl">
       <PageHeader title={`Edit ${lead.businessName}`} back={{ href: `/leads/${lead.id}`, label: lead.businessName }} subtitle={isCoord ? undefined : "As the sales rep you can update contact details and status. Ask the coordinator to change anything else."} />
       <ActionForm action={updateLeadAction}>
         <input type="hidden" name="id" value={lead.id} />
         <input type="hidden" name="version" value={lead.version} />
         {isCoord ? (
-          <LeadFormFields lead={lead} territories={territories} reps={reps} />
+          <LeadFormFields lead={lead} reps={reps} />
         ) : (
           <Fieldset title="Contact & status">
             <Field label="Contact person" name="contactName" defaultValue={lead.contactName} />

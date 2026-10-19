@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { runReminders } from "@/server/services/reminders";
+import { maybeSendScheduledEmails } from "@/server/services/scheduleEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ async function handle(req: Request) {
   const got = Buffer.from(req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
   const want = Buffer.from(secret);
   if (got.length !== want.length || !timingSafeEqual(got, want)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  return Response.json({ ok: true, ...(await runReminders()) });
+  const reminders = await runReminders();
+  const scheduleEmail = await maybeSendScheduledEmails().catch((e) => ({ error: e instanceof Error ? e.message : "failed" }));
+  return Response.json({ ok: true, ...reminders, scheduleEmail });
 }
 
 export const GET = handle;

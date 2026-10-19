@@ -80,6 +80,13 @@ export function weekdayOf(dateKey: string): number {
   return new Date(dateKey + "T12:00:00Z").getUTCDay();
 }
 
+/** The day whose schedule goes out today: tomorrow, or Monday when weekends are skipped. */
+export function nextWorkDay(todayKey: string, skipWeekends: boolean): string {
+  let d = addDays(todayKey, 1);
+  if (skipWeekends) while ([0, 6].includes(weekdayOf(d))) d = addDays(d, 1);
+  return d;
+}
+
 /** Monday-start week containing dateKey. */
 export function weekStartKey(dateKey: string, weekStartsOn = 1): string {
   const wd = weekdayOf(dateKey);

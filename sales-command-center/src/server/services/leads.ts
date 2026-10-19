@@ -65,6 +65,29 @@ export const leadInputSchema = z.object({
       return n;
     }),
   tags: z.array(z.string().trim().min(1).max(40)).max(30).default([]),
+  address2: optStr(300),
+  country: optStr(60),
+  cellPhone: optStr(40).refine((v) => !v || normalizePhone(v).length >= 7, "Cell phone number looks incomplete"),
+  /** $ millions, kept as entered (e.g. "1.50") */
+  businessVolume: optStr(30).refine((v) => !v || /^\$?\s*\d[\d,]*(\.\d+)?$/.test(v), "Business volume should be a number in $ millions, e.g. 1.50"),
+  problems: optStr(2000),
+  yearsInBusiness: z
+    .union([z.number(), z.string()])
+    .optional()
+    .nullable()
+    .transform((v, ctx) => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : Number(String(v).replace(/[,\s]/g, ""));
+      if (!Number.isInteger(n) || n < 0 || n > 500) {
+        ctx.addIssue({ code: "custom", message: "Years in business should be a whole number" });
+        return z.NEVER;
+      }
+      return n;
+    }),
+  bcName: optStr(120),
+  bcNumber: optStr(40),
+  bcCoDirector1: optStr(120),
+  bcCoDirector2: optStr(120),
 });
 export type LeadInput = z.input<typeof leadInputSchema>;
 

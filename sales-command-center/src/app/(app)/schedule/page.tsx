@@ -37,6 +37,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <Link href={`/schedule?date=${addDays(weekStart, -7)}${rq}`} className="btn-secondary">← Prev week</Link>
             <Link href={`/schedule?date=${today}${rq}`} className="btn-secondary">This week</Link>
             <Link href={`/schedule?date=${addDays(weekStart, 7)}${rq}`} className="btn-secondary">Next week →</Link>
+            {actor.role === "COORDINATOR" && <Link href="/schedule/email" className="btn-secondary">Email schedules</Link>}
             <WriteOnly><Link href={`/schedule/template${actor.role === "COORDINATOR" && repId ? `?rep=${repId}` : ""}`} className="btn-secondary">Recurring plan</Link></WriteOnly>
             <WriteOnly><Link href={`/appointments/new${repId && actor.role === "COORDINATOR" ? `?rep=${repId}` : ""}`} className="btn-primary">New appointment</Link></WriteOnly>
           </>

@@ -1,51 +1,66 @@
 import type { Lead } from "@prisma/client";
-import { Field, Fieldset, Select, TextArea, Checkbox } from "./fields";
-import { LEAD_STATUSES, LEAD_STATUS_LABEL, PRIORITIES, PRIORITY_LABEL } from "@/lib/labels";
+import { Field, Select, TextArea, Checkbox } from "./fields";
 
-type Territory = { id: string; name: string; areas: { id: string; name: string }[] };
+type LeadDefaults = Partial<Lead>;
 
-export function LeadFormFields({ lead, territories, reps, isNew }: { lead?: Partial<Lead> | null; territories: Territory[]; reps: { id: string; name: string }[]; isNew?: boolean }) {
+/**
+ * Lead form laid out like the BC Desk "Quick Appointment" screen: contact details on the left,
+ * BC notes, business details, appointment date and BC info on the right.
+ * Area and territory are set from the city and state automatically.
+ */
+export function LeadFormFields({ lead, reps, isNew, defaults }: { lead?: LeadDefaults | null; reps: { id: string; name: string }[]; isNew?: boolean; defaults?: LeadDefaults }) {
+  const v = <K extends keyof Lead>(k: K) => (lead?.[k] ?? defaults?.[k] ?? null) as Lead[K] | null;
+  const num = (n: number | null | undefined) => (n != null ? String(n) : "");
   return (
     <div className="space-y-4">
-      <Fieldset title="Business">
-        <Field label="Business / company name" name="businessName" required defaultValue={lead?.businessName} className="sm:col-span-2" />
-        <Field label="Industry / category" name="industry" defaultValue={lead?.industry} />
-        <Field label="Lead source" name="source" defaultValue={lead?.source} placeholder="Referral, walk-in, list…" />
-        <Field label="Prospect / account #" name="externalId" defaultValue={lead?.externalId} hint="ID from another system, e.g. PN on an exported log. Used to match re-imports." />
-        <Field label="Employees" name="employeeCount" inputMode="numeric" defaultValue={lead?.employeeCount != null ? String(lead.employeeCount) : ""} />
-      </Fieldset>
-      <Fieldset title="Contact">
-        <Field label="Contact person" name="contactName" defaultValue={lead?.contactName} autoComplete="off" />
-        <Field label="Job title" name="jobTitle" defaultValue={lead?.jobTitle} />
-        <Field label="Phone" name="phone" type="tel" inputMode="tel" defaultValue={lead?.phone} />
-        <Field label="Email" name="email" type="email" defaultValue={lead?.email} />
-      </Fieldset>
-      <Fieldset title="Location" cols={3}>
-        <Field label="Street address" name="address" defaultValue={lead?.address} className="sm:col-span-2 lg:col-span-3" />
-        <Field label="City" name="city" defaultValue={lead?.city} />
-        <Field label="State" name="state" defaultValue={lead?.state ?? (isNew ? "IL" : "")} />
-        <Field label="ZIP" name="zip" inputMode="numeric" defaultValue={lead?.zip} />
-        <label className="block sm:col-span-2 lg:col-span-1">
-          <span className="label">Area / neighborhood</span>
-          <select name="areaId" defaultValue={lead?.areaId ?? ""} className="input">
-            <option value="">No area</option>
-            {territories.map((t) => (
-              <optgroup key={t.id} label={t.name}>
-                {t.areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <Select label="Territory / region" name="territoryId" defaultValue={lead?.territoryId} empty="Set by area (or none)" options={territories.map((t) => ({ value: t.id, label: t.name }))} hint="Picking an area sets its territory automatically." />
-      </Fieldset>
-      <Fieldset title="Pipeline" cols={3}>
-        <Select label="Status" name="status" defaultValue={lead?.status ?? "NEW"} options={LEAD_STATUSES.map((s) => ({ value: s, label: LEAD_STATUS_LABEL[s] }))} />
-        <Select label="Priority" name="priority" defaultValue={lead?.priority ?? "NORMAL"} options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))} />
-        <Select label="Assigned sales rep" name="assignedRepId" defaultValue={lead?.assignedRepId} empty="Unassigned" options={reps.map((r) => ({ value: r.id, label: r.name }))} />
-        <Field label="Estimated deal value ($)" name="estimatedValue" inputMode="decimal" defaultValue={lead?.estimatedValue ? String(lead.estimatedValue) : ""} />
-        <Field label="Tags (comma-separated)" name="tags" defaultValue={lead?.tags?.join(", ")} className="lg:col-span-2" />
-        <TextArea label="Coordinator notes" name="notes" defaultValue={lead?.notes} rows={4} className="sm:col-span-2 lg:col-span-3" hint="Saved exactly as written." />
-      </Fieldset>
+      <div className="card grid gap-x-6 gap-y-3 p-4 lg:grid-cols-2">
+        <div className="space-y-3">
+          <Field label="Control Number" name="externalId" defaultValue={v("externalId")} hint="The prospect # (PN). Used to match imports and sales reports." />
+          <Select label="Sales Rep" name="assignedRepId" defaultValue={v("assignedRepId")} empty="Unassigned" options={reps.map((r) => ({ value: r.id, label: r.name }))} />
+          <Field label="Prospect Name" name="contactName" defaultValue={v("contactName")} autoComplete="off" />
+          <Field label="Prospect Title" name="jobTitle" defaultValue={v("jobTitle")} />
+          <Field label="Company Name" name="businessName" required defaultValue={v("businessName")} />
+          <Field label="Address 1" name="address" defaultValue={v("address")} />
+          <Field label="Address 2" name="address2" defaultValue={v("address2")} />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Zip/Postal Code" name="zip" inputMode="numeric" defaultValue={v("zip")} />
+            <Field label="City" name="city" defaultValue={v("city")} />
+            <Field label="State" name="state" defaultValue={v("state")} />
+          </div>
+          <Field label="Country" name="country" defaultValue={v("country") ?? "USA"} />
+          <Field label="Telephone" name="phone" type="tel" inputMode="tel" defaultValue={v("phone")} />
+          <Field label="Cell Phone" name="cellPhone" type="tel" inputMode="tel" defaultValue={v("cellPhone")} />
+          <Field label="Email" name="email" type="email" defaultValue={v("email")} />
+        </div>
+        <div className="space-y-3">
+          <TextArea label="BC Notes" name="notes" defaultValue={v("notes")} rows={5} hint="Saved exactly as written." />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Number of Employees" name="employeeCount" inputMode="numeric" defaultValue={num(v("employeeCount"))} />
+            <Field label="Business Volume ($ millions)" name="businessVolume" inputMode="decimal" defaultValue={v("businessVolume")} placeholder="e.g. 1.50" />
+          </div>
+          <Field label="Type of Business" name="industry" defaultValue={v("industry")} placeholder="e.g. Construction Company" />
+          <TextArea label="Problems" name="problems" defaultValue={v("problems")} rows={2} />
+          <Field label="Years in Business" name="yearsInBusiness" inputMode="numeric" defaultValue={num(v("yearsInBusiness"))} />
+          {isNew && (
+            <fieldset className="rounded-md border border-line p-3">
+              <legend className="px-1 text-xs font-medium text-ink-2">Appointment (optional)</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Date" name="apptDate" type="date" />
+                <Field label="Time" name="apptTime" type="time" hint="Leave blank if there's no set time." />
+                <div className="sm:col-span-2"><Checkbox name="apptConfirmed" label="Confirmed" /></div>
+                <Field label="Confirmed By" name="apptConfirmedBy" className="sm:col-span-2" />
+              </div>
+              <p className="mt-2 text-xs text-muted">With a date, the appointment is booked with the sales rep above.</p>
+            </fieldset>
+          )}
+          <Field label="BC" name="bcName" defaultValue={v("bcName")} />
+          <Field label="BC Number" name="bcNumber" defaultValue={v("bcNumber")} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="BC Co-Director 1" name="bcCoDirector1" defaultValue={v("bcCoDirector1")} />
+            <Field label="BC Co-Director 2" name="bcCoDirector2" defaultValue={v("bcCoDirector2")} />
+          </div>
+        </div>
+      </div>
       {isNew && <Checkbox name="allowDuplicate" label="Create anyway, even if it looks like an existing lead" />}
     </div>
   );
