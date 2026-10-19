@@ -69,6 +69,7 @@ export default async function AppointmentPage({ params, searchParams }: { params
               <KV label="Location">{a.location}</KV>
               <KV label="Rep">{a.rep.name}</KV>
               <KV label="Booked by">{a.createdBy.name} · {fmtDateTime(a.createdAt, tz)}</KV>
+              {a.confirmedBy && <KV label="Confirmed By">{a.confirmedBy}</KV>}
               {original && original.toStart && original.toStart.getTime() !== a.startAt.getTime() && <KV label="Originally booked for">{fmtDateTime(original.toStart, tz)}</KV>}
               {a.cancelReason && <KV label="Cancel reason">{a.cancelReason}</KV>}
               {a.notes && <KV label="Notes" className="sm:col-span-2"><span className="whitespace-pre-line">{a.notes}</span></KV>}

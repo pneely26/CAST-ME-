@@ -243,9 +243,20 @@ model Lead {
   normalizedPhone   String?
   email             String?
   address           String?
+  address2          String?
   city              String?
   state             String?
   zip               String?
+  country           String?
+  cellPhone         String?
+  // quick-appointment form fields (as entered)
+  businessVolume    String? // $ millions, as entered
+  problems          String?
+  yearsInBusiness   Int?
+  bcName            String?
+  bcNumber          String?
+  bcCoDirector1     String?
+  bcCoDirector2     String?
   normalizedAddress String?
   territoryId       String?
   areaId            String?
@@ -367,6 +378,7 @@ model Appointment {
   notes       String?
   cancelReason String?
   canceledAt  DateTime?
+  confirmedBy String?
   createdById String
   clientKey   String?           @unique
   version     Int               @default(1)

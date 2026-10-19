@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
-  serverExternalPackages: ["@prisma/client", "bcryptjs", "pdfjs-dist"],
+  serverExternalPackages: ["@prisma/client", "bcryptjs", "pdfjs-dist", "nodemailer"],
   experimental: { serverActions: { bodySizeLimit: "25mb" } },
   async headers() {
     return [

@@ -18,7 +18,7 @@ import { WriteOnly } from "@/components/ReadOnly";
 
 const TABS = [
   { key: "overview", label: "Overview" },
-  { key: "contact", label: "Contact" },
+  { key: "contact", label: "General" },
   { key: "visits", label: "Visit History" },
   { key: "notes", label: "Notes & Feedback" },
   { key: "appointments", label: "Appointments" },
@@ -151,7 +151,6 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 <KV label="Next follow-up">{lead.nextFollowUpAt ? <span className="inline-flex items-center gap-1">{fmtDate(lead.nextFollowUpAt, tz)} <DueBadge due={lead.nextFollowUpAt} now={now} tz={tz} /></span> : "—"}</KV>
                 <KV label="Next appointment">{(() => { const n = lead.appointments.find((a) => a.startAt.getTime() === lead.nextAppointmentAt?.getTime()); return n ? apptDateTime(n, tz) : lead.nextAppointmentAt ? fmtDateTime(lead.nextAppointmentAt, tz) : "—"; })()}</KV>
                 <KV label="Next planned visit">{plannedStops[0] ? fmtDate(new Date(plannedStops[0].dayPlan.date + "T12:00:00Z"), "UTC") : "—"}</KV>
-                <KV label="Estimated value">{money(lead.estimatedValue ? Number(lead.estimatedValue) : null)}</KV>
                 <KV label="Created">{fmtDate(lead.createdAt, tz)}{lead.source ? ` · ${lead.source}` : ""}</KV>
               </dl>
               {lead.latestFeedback && (
@@ -256,19 +255,28 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       )}
 
       {tab === "contact" && (
-        <Section title="Contact information" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
+        <Section title="General" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
           <dl className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
-            <KV label="Contact person">{lead.contactName}</KV>
-            <KV label="Job title">{lead.jobTitle}</KV>
-            <KV label="Phone">{lead.phone ? <a className="link" href={`tel:${lead.phone.replace(/[^\d+]/g, "")}`}>{formatPhone(lead.phone)}</a> : null}</KV>
+            <KV label="Control Number">{lead.externalId}</KV>
+            <KV label="Sales Rep">{lead.assignedRep?.name ?? "Unassigned"}</KV>
+            <KV label="Prospect Name">{lead.contactName}</KV>
+            <KV label="Prospect Title">{lead.jobTitle}</KV>
+            <KV label="Company Name">{lead.businessName}</KV>
+            <KV label="Address">{mapQuery ? <a className="link" target="_blank" rel="noopener noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}>{[lead.address, lead.address2].filter(Boolean).join(", ") || mapQuery}</a> : null}{mapQuery && <span className="block text-xs text-muted">{[lead.city, lead.state, lead.zip, lead.country].filter(Boolean).join(", ")}</span>}</KV>
+            <KV label="Telephone">{lead.phone ? <a className="link" href={`tel:${lead.phone.replace(/[^\d+]/g, "")}`}>{formatPhone(lead.phone)}</a> : null}</KV>
+            <KV label="Cell Phone">{lead.cellPhone ? <a className="link" href={`tel:${lead.cellPhone.replace(/[^\d+]/g, "")}`}>{formatPhone(lead.cellPhone)}</a> : null}</KV>
             <KV label="Email">{lead.email ? <a className="link" href={`mailto:${lead.email}`}>{lead.email}</a> : null}</KV>
-            <KV label="Address">{mapQuery ? <a className="link" target="_blank" rel="noopener noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}>{mapQuery}</a> : null}</KV>
+            <KV label="Number of Employees">{lead.employeeCount != null ? lead.employeeCount.toLocaleString() : null}</KV>
+            <KV label="Business Volume ($ millions)">{lead.businessVolume}</KV>
+            <KV label="Type of Business">{lead.industry}</KV>
+            <KV label="Problems">{lead.problems && <span className="whitespace-pre-line">{lead.problems}</span>}</KV>
+            <KV label="Years in Business">{lead.yearsInBusiness}</KV>
             <KV label="Area / territory">{[lead.area?.name, lead.territory?.name].filter(Boolean).join(" · ") || null}</KV>
-            <KV label="Industry">{lead.industry}</KV>
-            <KV label="Lead source">{lead.source}</KV>
-            <KV label="Prospect / account #">{lead.externalId}</KV>
-            <KV label="Employees">{lead.employeeCount != null ? lead.employeeCount.toLocaleString() : null}</KV>
-            <KV label="Assigned rep">{lead.assignedRep?.name ?? "Unassigned"}</KV>
+            <KV label="BC">{lead.bcName}</KV>
+            <KV label="BC Number">{lead.bcNumber}</KV>
+            <KV label="BC Co-Director 1">{lead.bcCoDirector1}</KV>
+            <KV label="BC Co-Director 2">{lead.bcCoDirector2}</KV>
+            {lead.notes && <KV label="BC Notes" className="sm:col-span-2 lg:col-span-3"><span className="whitespace-pre-line">{lead.notes}</span></KV>}
             <KV label="Created">{fmtDateTime(lead.createdAt, tz)}</KV>
             <KV label="Last updated">{fmtDateTime(lead.updatedAt, tz)}</KV>
           </dl>
@@ -315,7 +323,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
 
       {tab === "notes" && (
         <div className="grid gap-5 lg:grid-cols-2">
-          <Section title="Coordinator notes" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
+          <Section title="BC Notes" action={isCoord ? <Link href={`/leads/${lead.id}/edit`} className="link text-xs">Edit</Link> : undefined}>
             <div className="whitespace-pre-line p-4 text-sm">{lead.notes || <span className="text-muted">No notes.</span>}</div>
           </Section>
           <Section title="Rep feedback" subtitle="From every visit, newest first">

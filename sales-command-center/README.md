@@ -74,7 +74,10 @@ npm run build && npm start
 | `ANTHROPIC_API_KEY` | no | Turns on automatic reading of lead screenshots. Used only on the server. Without it, screenshots are still stored and leads are typed in by hand. |
 | `EXTRACTION_MODEL` | no | Vision model for screenshots (default `claude-opus-5-5`). |
 | `EXTRACTION_PROVIDER` | no | Set to `none` to turn screenshot reading off even if a key is present. |
-| `CRON_SECRET` | no | Enables `POST /api/cron/reminders` for an external scheduler (16+ characters). |
+| `CRON_SECRET` | no | Enables `POST /api/cron/reminders` for an external scheduler (16+ characters). The same call also sends the daily schedule email when it's due. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | no | Outgoing email for the reps' schedule emails, e.g. `smtp.gmail.com` / `587` / your Gmail address / a Google *app password*, or `smtp.office365.com` for Outlook. Without these, nothing is emailed and the app says so. |
+| `EMAIL_FROM` | no | Sender shown on emails, e.g. `Your Name <you@gmail.com>` (defaults to `SMTP_USER`). |
+| `APP_URL` | no | Public address used for links in emails (Render sets `RENDER_EXTERNAL_URL` automatically). |
 | `INSECURE_COOKIES` | no | `true` allows sign-in over plain `http` on a local network. **Never set this on an internet-facing deployment.** |
 
 Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothing secret is sent to the browser.
@@ -145,6 +148,28 @@ Secrets live only in `.env` (git-ignored) or your host's secret settings. Nothin
    - Possible duplicates are shown side by side with the existing lead.
    - For each row, choose **Create**, **Merge** (fills only empty fields on the existing lead and appends notes word for word) or **Skip**.
    - **Import ready rows** creates only rows with no problems and no duplicate match. Everything else stays for review, so partial imports are fine.
+
+### Entering a lead
+
+The **New lead** form follows the BC Desk *Quick Appointment* layout.
+
+- **Left column:** Control Number, Sales Rep, Prospect Name, Prospect Title, Company Name, Address 1 and 2, Zip, City, State, Country, Telephone, Cell Phone and Email.
+- **Right column:** BC Notes, Number of Employees, Business Volume ($ millions), Type of Business, Problems, Years in Business, the appointment Date and Time (with Confirmed / Confirmed By), BC, BC Number and BC Co-Directors.
+- **Appointment:** with a date, the appointment is booked with the Sales Rep in the same step. Without a time, it's booked for the day with no set time.
+- **Area and territory:** set from the city and state, the same way as imports.
+- **BC fields:** start filled in from the last lead you entered.
+
+### Emailing reps their schedule
+
+**Schedule → Email schedules** (coordinator only):
+
+- **What's in it:** each rep's appointments and planned visits for a day, with every lead's details: control number, prospect, address with a map link, phones, business info, problems, BC notes and latest feedback.
+- **Preview:** shows exactly what each rep will get.
+- **Send now:** emails the ticked reps. Reps with nothing scheduled are skipped.
+- **Send automatically:** emails every rep the next day's schedule at a set time. On Friday it sends Monday's when weekends are skipped. It sends once a day, and each send appears under **Recently sent** and in the audit log.
+- **Requirements:**
+  - The `SMTP_*` settings must be set. Until then the page explains how and nothing is sent.
+  - The server must be awake at send time. On a host that sleeps when idle (Render free), have a free scheduler call `/api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` every 15 minutes.
 
 ### Importing sales (BC History PDF)
 

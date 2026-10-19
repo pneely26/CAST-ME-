@@ -2,47 +2,63 @@
 
 import { revalidatePath } from "next/cache";
 import type { LeadPriority, LeadStatus } from "@prisma/client";
+import type { Actor } from "@/server/policy";
+import { invalid } from "@/server/errors";
+import { getSettings } from "@/server/settings";
+import { areaForCity } from "@/server/services/imports";
+import { createAppointmentInTx } from "@/server/services/appointments";
+import { dayRangeUtc, isDateKey, isTime, zonedToUtc } from "@/lib/time";
 import { actorOrThrow } from "@/server/auth";
 import { toResult, type ActionResult } from "@/server/errors";
 import { assignLeads, bulkUpdate, createLead, updateLead, archiveLeads, type BulkAction, type LeadInput } from "@/server/services/leads";
 import { prisma } from "@/server/db";
-import { bool, id, ids, str, strOrNull, tags, int } from "@/server/form";
+import { bool, id, ids, str, strOrNull, int } from "@/server/form";
 
+const LEAD_TEXT_FIELDS: [keyof LeadInput, number][] = [
+  ["contactName", 120], ["jobTitle", 120], ["phone", 40], ["cellPhone", 40], ["email", 200], ["address", 300], ["address2", 300], ["city", 100], ["state", 40], ["zip", 20], ["country", 60],
+  ["industry", 120], ["assignedRepId", 40], ["externalId", 60], ["employeeCount", 12], ["businessVolume", 30], ["problems", 2000], ["yearsInBusiness", 6],
+  ["bcName", 120], ["bcNumber", 40], ["bcCoDirector1", 120], ["bcCoDirector2", 120], ["notes", 10000],
+];
+
+/** Only the fields the form actually sent — anything not on the form keeps its saved value. */
 function leadFields(fd: FormData): LeadInput {
-  return {
-    businessName: str(fd, "businessName", 200) ?? "",
-    contactName: strOrNull(fd, "contactName", 120),
-    jobTitle: strOrNull(fd, "jobTitle", 120),
-    phone: strOrNull(fd, "phone", 40),
-    email: strOrNull(fd, "email", 200),
-    address: strOrNull(fd, "address", 300),
-    city: strOrNull(fd, "city", 100),
-    state: strOrNull(fd, "state", 40),
-    zip: strOrNull(fd, "zip", 20),
-    territoryId: strOrNull(fd, "territoryId", 40),
-    areaId: strOrNull(fd, "areaId", 40),
-    source: strOrNull(fd, "source", 120),
-    industry: strOrNull(fd, "industry", 120),
-    assignedRepId: strOrNull(fd, "assignedRepId", 40),
-    priority: (str(fd, "priority") || "NORMAL") as LeadPriority,
-    status: (str(fd, "status") || "NEW") as LeadStatus,
-    estimatedValue: strOrNull(fd, "estimatedValue", 30),
-    ...(fd.has("externalId") ? { externalId: strOrNull(fd, "externalId", 60) } : {}),
-    ...(fd.has("employeeCount") ? { employeeCount: strOrNull(fd, "employeeCount", 12) } : {}),
-    notes: strOrNull(fd, "notes", 10000),
-    tags: tags(fd),
-  };
+  const out: Record<string, unknown> = { businessName: str(fd, "businessName", 200) ?? "" };
+  for (const [k, max] of LEAD_TEXT_FIELDS) if (fd.has(k)) out[k] = strOrNull(fd, k, max);
+  return out as LeadInput;
+}
+
+/** Area = the city, territory = the state (created if needed), same as imports. */
+async function placeByCity(actor: Actor, input: LeadInput) {
+  const placed = await areaForCity(actor, input.city, input.state);
+  return placed ? { areaId: placed.areaId, territoryId: placed.territoryId } : {};
 }
 
 export async function createLeadAction(_: unknown, fd: FormData): Promise<ActionResult<{ id: string }>> {
   try {
     const actor = await actorOrThrow();
-    const lead = await createLead(actor, leadFields(fd), { allowDuplicate: bool(fd, "allowDuplicate") });
+    const input = leadFields(fd);
+    const apptDate = str(fd, "apptDate", 10);
+    const apptTime = str(fd, "apptTime", 5);
+    if (apptDate && !isDateKey(apptDate)) throw invalid("Appointment date isn't a valid date.");
+    if (apptTime && !isTime(apptTime)) throw invalid("Appointment time isn't a valid time.");
+    if (apptDate && !input.assignedRepId) throw invalid("Choose the Sales Rep for the appointment (or leave the date blank).");
+    const placed = await placeByCity(actor, input);
+    const settings = await getSettings();
+    const lead = await prisma.$transaction(async (tx) => {
+      const lead = await createLead(actor, { ...input, ...placed }, { allowDuplicate: bool(fd, "allowDuplicate"), tx });
+      if (apptDate) {
+        const timed = apptTime
+          ? (() => { const startAt = zonedToUtc(apptDate, apptTime, settings.timezone); return { startAt, endAt: new Date(startAt.getTime() + settings.defaultAppointmentMinutes * 60_000), timeSet: true }; })()
+          : { ...(({ start, end }) => ({ startAt: start, endAt: end }))(dayRangeUtc(apptDate, apptDate, settings.timezone)), timeSet: false };
+        await createAppointmentInTx(tx, actor, { leadId: lead.id, repId: input.assignedRepId, ...timed, allowOverlap: true, confirmed: bool(fd, "apptConfirmed"), confirmedBy: strOrNull(fd, "apptConfirmedBy", 120) });
+      }
+      return lead;
+    });
     revalidatePath("/", "layout");
-    return { ok: true, data: { id: lead.id }, message: "Lead created", redirect: `/leads/${lead.id}?msg=Lead+created` };
+    return { ok: true, data: { id: lead.id }, message: "Lead created", redirect: `/leads/${lead.id}?msg=${apptDate ? "Lead+created+and+appointment+booked" : "Lead+created"}` };
   } catch (e) {
     const r = toResult(e);
-    if (r.code === "CONFLICT") r.error += " Tick “Create anyway” if this really is a different business.";
+    if (r.code === "CONFLICT" && !r.error.includes("appointment")) r.error += " Tick “Create anyway” if this really is a different business.";
     return r;
   }
 }
@@ -52,7 +68,13 @@ export async function updateLeadAction(_: unknown, fd: FormData): Promise<Action
     const actor = await actorOrThrow();
     const leadId = id(fd);
     const version = int(fd, "version");
-    const input = actor.role === "COORDINATOR" ? leadFields(fd) : { contactName: strOrNull(fd, "contactName", 120), jobTitle: strOrNull(fd, "jobTitle", 120), phone: strOrNull(fd, "phone", 40), email: strOrNull(fd, "email", 200), status: (str(fd, "status") || undefined) as LeadStatus | undefined };
+    let input: Partial<LeadInput> = actor.role === "COORDINATOR" ? leadFields(fd) : { contactName: strOrNull(fd, "contactName", 120), jobTitle: strOrNull(fd, "jobTitle", 120), phone: strOrNull(fd, "phone", 40), email: strOrNull(fd, "email", 200), status: (str(fd, "status") || undefined) as LeadStatus | undefined };
+    if (actor.role === "COORDINATOR") {
+      // a new city or state moves the lead to that city's area
+      const cur = await prisma.lead.findUnique({ where: { id: leadId }, select: { city: true, state: true } });
+      const norm = (x: string | null | undefined) => (x ?? "").trim().toLowerCase();
+      if (cur && (norm(cur.city) !== norm(input.city) || norm(cur.state) !== norm(input.state))) input = { ...input, areaId: null, territoryId: null, ...(await placeByCity(actor, input as LeadInput)) };
+    }
     await updateLead(actor, leadId, input, version);
     revalidatePath("/", "layout");
     return { ok: true, data: { id: leadId }, message: "Saved", redirect: `/leads/${leadId}?msg=Saved` };

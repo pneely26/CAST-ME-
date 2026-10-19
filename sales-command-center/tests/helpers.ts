@@ -15,6 +15,9 @@ export async function setupTestDb(): Promise<PrismaClient> {
 }
 
 export async function wipe(p: PrismaClient) {
+  // never wipe anything but a test database (e.g. if a client was created before DATABASE_URL was switched)
+  const [{ db }] = await p.$queryRaw<{ db: string }[]>`SELECT current_database() AS db`;
+  if (!db.endsWith("_test")) throw new Error(`Refusing to wipe database "${db}" — only databases ending in _test are wiped`);
   const tables = await p.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'`;
   if (tables.length) await p.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
 }

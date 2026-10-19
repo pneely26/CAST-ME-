@@ -24,12 +24,16 @@ export const appointmentSchema = z.object({
   clientKey: z.string().max(80).optional().nullable(),
   /** user confirmed they want to book despite an overlapping appointment */
   allowOverlap: z.boolean().default(false),
+  /** false = only the date is known; startAt/endAt span that local day */
+  timeSet: z.boolean().default(true),
+  confirmed: z.boolean().default(false),
+  confirmedBy: z.string().trim().max(120).optional().nullable(),
 });
 
 export async function createAppointmentInTx(tx: Tx, actor: Actor, raw: z.input<typeof appointmentSchema>) {
   assertWriter(actor);
   const d = appointmentSchema.parse(raw);
-  const err = validateTimes(d.startAt, d.endAt);
+  const err = d.timeSet ? validateTimes(d.startAt, d.endAt) : d.endAt > d.startAt ? null : "Choose a date.";
   if (err) throw invalid(err);
   if (d.clientKey) {
     const existing = await tx.appointment.findUnique({ where: { clientKey: d.clientKey } });
@@ -52,22 +56,22 @@ export async function createAppointmentInTx(tx: Tx, actor: Actor, raw: z.input<t
   const dup = findDuplicate({ leadId: d.leadId, startAt: d.startAt }, nearby, settings.duplicateAppointmentWindowMinutes);
   if (dup) throw conflict(`${lead.businessName} already has an active appointment at ${fmtDateTime(dup.startAt, settings.timezone)}. Reschedule that one instead of booking a second.`, { duplicateId: dup.id });
   const overlaps = findConflicts({ repId, startAt: d.startAt, endAt: d.endAt }, nearby);
-  if (overlaps.length && !d.allowOverlap) {
+  if (overlaps.length && !d.allowOverlap && d.timeSet) {
     throw conflict(`Time conflict: ${rep.name} already has ${overlaps.length} appointment(s) overlapping this time (${overlaps.map((o) => fmtDateTime(o.startAt, settings.timezone)).join(", ")}). Tick “Book anyway” to keep both.`, { conflicts: overlaps.map((o) => o.id) });
   }
 
   const appt = await tx.appointment.create({
-    data: { leadId: d.leadId, repId, kind: d.kind as AppointmentKind, startAt: d.startAt, endAt: d.endAt, title: d.title ?? null, location: d.location ?? ([lead.address, lead.city].filter(Boolean).join(", ") || null), notes: d.notes ?? null, createdById: actor.id, clientKey: d.clientKey ?? null },
+    data: { leadId: d.leadId, repId, kind: d.kind as AppointmentKind, startAt: d.startAt, endAt: d.endAt, timeSet: d.timeSet, ...(d.confirmed ? { status: "CONFIRMED" as const } : {}), confirmedBy: d.confirmedBy || null, title: d.title ?? null, location: d.location ?? ([lead.address, lead.city].filter(Boolean).join(", ") || null), notes: d.notes ?? null, createdById: actor.id, clientKey: d.clientKey ?? null },
   });
   await tx.appointmentChange.create({ data: { appointmentId: appt.id, action: "CREATED", toStart: appt.startAt, toEnd: appt.endAt, changedById: actor.id } });
-  await audit(tx, actor, "appointment.created", { type: "Appointment", id: appt.id, leadId: lead.id }, `${d.kind === "FOLLOW_UP_VISIT" ? "Follow-up visit" : "Appointment"} scheduled for ${fmtDateTime(appt.startAt, settings.timezone)} with ${rep.name}${overlaps.length ? " (overlap confirmed)" : ""}`);
+  await audit(tx, actor, "appointment.created", { type: "Appointment", id: appt.id, leadId: lead.id }, `${d.kind === "FOLLOW_UP_VISIT" ? "Follow-up visit" : "Appointment"} scheduled for ${apptDateTime(appt, settings.timezone)} with ${rep.name}${overlaps.length ? " (overlap confirmed)" : ""}`);
   const next = advanceStatus(lead.status, "APPOINTMENT_SCHEDULED");
   if (next !== lead.status) {
     await tx.lead.update({ where: { id: lead.id }, data: { status: next, version: { increment: 1 } } });
     await audit(tx, actor, "lead.status", { type: "Lead", id: lead.id, leadId: lead.id }, `Status → Appointment Scheduled (appointment booked)`, { from: lead.status, to: next });
   }
-  if (repId !== actor.id) await notify(tx, repId, { type: "APPOINTMENT_UPCOMING", title: `New appointment: ${lead.businessName}`, body: fmtDateTime(appt.startAt, settings.timezone), link: `/appointments/${appt.id}`, dedupeKey: `appt-new:${appt.id}` });
-  else if (!isCoordinator(actor)) await notifyCoordinators(tx, { type: "APPOINTMENT_UPCOMING", title: `${actor.name} booked ${lead.businessName}`, body: fmtDateTime(appt.startAt, settings.timezone), link: `/appointments/${appt.id}`, dedupeKey: `appt-new:${appt.id}` });
+  if (repId !== actor.id) await notify(tx, repId, { type: "APPOINTMENT_UPCOMING", title: `New appointment: ${lead.businessName}`, body: apptDateTime(appt, settings.timezone), link: `/appointments/${appt.id}`, dedupeKey: `appt-new:${appt.id}` });
+  else if (!isCoordinator(actor)) await notifyCoordinators(tx, { type: "APPOINTMENT_UPCOMING", title: `${actor.name} booked ${lead.businessName}`, body: apptDateTime(appt, settings.timezone), link: `/appointments/${appt.id}`, dedupeKey: `appt-new:${appt.id}` });
   await refreshLeadRollups(tx, lead.id);
   return appt;
 }
