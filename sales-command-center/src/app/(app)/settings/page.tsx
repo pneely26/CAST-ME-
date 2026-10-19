@@ -51,7 +51,6 @@ export default async function SettingsPage() {
           <SubmitButton className="btn-secondary">Change password</SubmitButton>
         </ActionForm>
       </div>
-      {me.role === "REP" && <p className="border-t border-line px-4 py-3 text-xs text-muted">Your sign-ins and the pages you open in this app are recorded and visible to your coordinator.</p>}
     </Section>
   );
   if (!coord) return <div className="max-w-4xl space-y-4"><PageHeader title="Settings" />{account}</div>;
